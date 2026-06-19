@@ -26,6 +26,7 @@ jobs:
       # compiled + linted. Real bytes replace these once `npm run sync:web` runs (Increment 2). A full
       # `tauri build` smoke against a *real* synced payload is gated behind Increment 2 + the token.
       - name: Synthesize bootstrap payload skeleton (if no real payload synced)
+        working-directory: ${{ github.workspace }} # override the job's src-tauri default — paths are repo-root-relative
         run: |
           mkdir -p vendor/gemini-web/dist vendor/gemini-web/apodictic-plugin vendor/gemini-web/binaries
           [ -f vendor/gemini-web/dist/index.html ] || printf '<!doctype html><title>bootstrap stub</title>\n' > vendor/gemini-web/dist/index.html
