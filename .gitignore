@@ -1,0 +1,23 @@
+# Node
+node_modules/
+npm-debug.log*
+.env
+.env.local
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/
+src-tauri/.env.local
+
+# Vendored Gemini desktop payload — pulled by scripts/sync-gemini-web.mjs, NOT committed.
+# The lock (gemini-web.lock) IS committed and is the source of truth; the payload bytes
+# (large pkg'd sidecar binaries + built dist) are fetched on demand for build.
+vendor/gemini-web/dist/
+vendor/gemini-web/binaries/
+vendor/gemini-web/apodictic-plugin/
+vendor/gemini-web/payload-manifest.json
+
+# Build output / OS cruft
+dist/
+*.app
+.DS_Store

@@ -1,0 +1,125 @@
+# Agent workflow — apodictic-tauri
+
+APODICTIC's desktop shell is solo-maintained (`anotherpanacea-eng`) but multi-agent: Claude,
+Codex, and other sessions all contribute. This document records the internal workflow they
+follow. It governs the maintainer's own agent sessions.
+
+## Fleet / cross-repo context
+
+This repo is one of **five** maintained together (all `github.com/anotherpanacea-eng`):
+`setec-voiceprint` (producer · public · Python), `apodictic` (consumer + producer · public ·
+Python), `setec-voicewright` (consumer · private · Python), `APODICTIC-Gemini` (consumer ·
+private · TS web app), and `apodictic-tauri` (consumer · private · Rust + TS — **this repo**).
+
+**This repo's dependency contract:**
+- **Consumes** `APODICTIC-Gemini`'s versioned **desktop payload** (built `dist/` + per-target
+  `app-sidecar` binaries + the apodictic-plugin), published as a release asset. Pinned in
+  `gemini-web.lock`, drift-gated offline by `scripts/sync-gemini-web.mjs --check`. The weekly
+  `.github/workflows/sync-gemini-web.yml` auto-PRs the version bump. **Don't hand-edit the lock
+  or the vendored payload under `vendor/gemini-web/` — run `scripts/sync-gemini-web.mjs`.**
+- The vendored payload bytes are **gitignored** (large binaries); only `gemini-web.lock` is
+  committed. The lock + the producer's `payload-manifest.json` hashes are the reproducibility anchor.
+- **Auth note:** `APODICTIC-Gemini` is **private**, so the sync workflow needs a PAT/GitHub-App
+  token with cross-repo read on it (the default `GITHUB_TOKEN` is current-repo-scoped and will
+  not read a sibling private repo's release assets).
+
+**This repo is a *surface*, not the engine.** The editorial rules/schemas/validators/passes and
+the model-provider abstraction (incl. local-LLM backends) live **below** this shell, in
+`apodictic` + `APODICTIC-Gemini`'s `server/`. Never put analysis logic in the Rust/JS command
+layer — keep the shell replaceable.
+
+**Shared workflow:** spec→review→write→review→fix→merge; merge commits, never squash; Codex 5.5
+is the PR review step (don't merge out from under it); version bumps at merge. (Detail below.)
+
+**Protect-public-only:** this is a **private** repo, so no branch protection is configured (the
+fleet only protects the public repos). The Codex review gate is still observed by convention.
+
+**Fuller cross-repo context** (backlog, topology, the architecture spec, deep lessons) lives in
+the maintainer's local `Cowork/repo-fleet/` hub — **not reachable from cloud containers** (which
+hold only this one git repo). The architecture + migration plan also lives in-repo at
+[`docs/architecture.md`](docs/architecture.md). If you're a cloud session and need cross-repo
+context beyond this section, flag it rather than guessing.
+
+## The flow
+
+```
+spec  →  review  →  write  →  review  →  fix  →  merge
+            ▲                    ▲
+         reviewer             reviewer
+```
+
+1. **Spec.** What the change should do. Strategic work lives in `docs/architecture.md`;
+   non-trivial ad-hoc work gets a GitHub Issue; trivial work can be a chat brief.
+2. **Spec review.** A second agent surfaces gaps, dependency issues, or scope creep before
+   writing starts.
+3. **Write.** One agent implements.
+4. **Code review.** The other agent reads the diff and flags issues.
+5. **Fix.** The writing agent applies fixes.
+6. **Merge.** Via PR + merge commit.
+
+### Review practices
+
+The spec/code reviews earn their keep when the reviewer does more than read for plausibility —
+run the real gate, distrust count-shaped or "it builds" claims, and check the seams the change
+actually touches (here: the vendor boundary, the sidecar lifecycle, the keychain/Stronghold
+chain, and the Tauri capability allowlist). The spec-review gate for this repo's own founding
+caught three blocking transport/sequencing issues before any code was written — keep that bar.
+
+## Vendor / consumer machinery
+
+- `scripts/sync-gemini-web.mjs` pulls the pinned Gemini desktop-payload **release asset** (not a
+  git tarball — the payload is uncommitted build artifacts), verifies every hash against the
+  producer's `payload-manifest.json`, writes `vendor/gemini-web/`, and records `gemini-web.lock`.
+- `scripts/sync-gemini-web.mjs --check` is the **drift gate** (CI-blocking): non-zero if the lock
+  is behind the latest Gemini release or any vendored hash ≠ the lock. It compares the resolved
+  **commit**, not just the tag, to catch a re-pointed tag.
+- Run `sync:web` before `desktop:build` — `frontendDist`/`externalBin`/`resources` resolve to
+  `vendor/gemini-web/`, and there is no fallback build-from-source path.
+
+## PRs and merges
+
+- **Default to PR-per-change with a merge commit** (`gh pr merge <N> --merge`), not squash —
+  preserves the spec-review-fix structure on `main`.
+- **Delete the branch on merge** (`--delete-branch`).
+- **Bump the version at merge, not in the PR** (open PRs merge in unknown order).
+- **Codex 5.5 is the standing PR reviewer; don't merge out from under it.** Make the obvious
+  fixes, then let its pass run. Auto-merge only on dual agreement (Claude + Codex, CI green,
+  threads resolved); otherwise hold for the second opinion.
+- **`gh` OAuth workflow-scope merge block.** A PR touching `.github/workflows/` can't be merged
+  with the `gh` OAuth token (403). Fallback: local `git merge --no-ff` into a `main` worktree →
+  push (needs explicit OK for the direct-to-main push), or merge via the web UI.
+
+### Branch naming
+
+- `feat/<surface>` new features · `fix/<short-description>` fixes ·
+  `chore/<short-description>` / `docs/<short-description>` ancillary ·
+  `codex/<short-description>` Codex-authored proposals.
+
+### When to skip the PR
+
+Direct push to `main` is fine for typo fixes, README/doc prose, and single-line non-behavioral
+corrections. Anything that changes the shell's behavior, the vendor boundary, the build, CI, or
+the security chain lands via PR.
+
+## CI
+
+`.github/workflows/ci.yml` runs: `cargo build`/`clippy` on `src-tauri/`, the
+`sync-gemini-web.mjs --check` drift gate, and (where a macOS runner is available) a `tauri build`
+smoke against a vendored payload. Windows build/smoke is gated behind a Windows runner (v1 is
+macOS-only). `.github/workflows/sync-gemini-web.yml` opens the weekly payload-bump PR.
+
+## Security (do not regress)
+
+The OS-keychain → Stronghold vault-key + `CREDENTIAL_ENCRYPTION_KEY` DEK chain (`src-tauri/src/
+lib.rs`) is the local-credential guarantee — re-verify it survives any change. Keep
+`src-tauri/capabilities/default.json` (the permission boundary) minimal and in step with the
+shell's actual shell/keychain usage.
+
+## Co-authorship
+
+Commits authored end-to-end by one agent carry that agent's trailer; pair-authored commits carry
+both.
+
+## When this document is wrong
+
+Update it. It's a working document, not a contract.
