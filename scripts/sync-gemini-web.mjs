@@ -177,8 +177,20 @@ async function doCheck() {
     process.exit(0);
   }
 
-  // 1) Offline: vendored bytes must match the lock.
-  const problems = verifyVendoredAgainstLock(lock);
+  // 1) Offline byte-integrity. The vendored payload is gitignored / pulled on demand (large
+  // binaries), so in a fresh checkout (PR-time CI) it is ABSENT. Verify only when it's present;
+  // otherwise skip — integrity is enforced at sync time against the producer manifest, and the
+  // payload is re-pulled before any build. Without this skip a pinned lock made the gate fail
+  // forever in CI on a clean checkout (Codex P1, 2026-06-19).
+  const payloadPresent =
+    fs.existsSync(path.join(VENDOR, "dist")) || fs.existsSync(path.join(VENDOR, "binaries"));
+  const problems = payloadPresent ? verifyVendoredAgainstLock(lock) : [];
+  if (!payloadPresent) {
+    console.log(
+      "• vendored payload not present locally (gitignored; pulled on demand by `npm run sync:web`).\n" +
+        "  Offline byte-verify skipped — integrity is enforced at sync time against the producer manifest."
+    );
+  }
 
   // 2) Online (only if a token is available): is the lock behind the latest release?
   if (token()) {
@@ -271,15 +283,25 @@ async function doSync() {
     if (claimed && claimed !== got) transit.push(`sidecar ${target}: manifest ${claimed} != downloaded ${got}`);
     sidecars.push({ target, sha256: got });
   }
+  // Bind the payload to the release tag's commit (Codex P1, 2026-06-19): the producer stamps
+  // manifest.commit with the commit it built from; require it to equal the tag's resolved commit,
+  // or the payload wasn't built from this tag (a release asset can be uploaded from any build).
+  const tagCommit = await resolveCommit(rel.tag_name);
+  if (!manifest.commit) {
+    transit.push("payload-manifest.json has no `commit` — cannot bind the payload to the tag.");
+  } else if (tagCommit && manifest.commit !== tagCommit) {
+    transit.push(`payload built from commit ${manifest.commit} but tag ${rel.tag_name} resolves to ${tagCommit}`);
+  }
+
   if (transit.length) {
-    console.error("✗ payload integrity check failed (manifest vs downloaded bytes):\n  - " + transit.join("\n  - "));
+    console.error("✗ payload integrity check failed:\n  - " + transit.join("\n  - "));
     process.exit(1);
   }
 
   const lock = {
     repo: REPO,
     tag: rel.tag_name,
-    commit: await resolveCommit(rel.tag_name),
+    commit: tagCommit,
     web_version: manifest.web_version,
     plugin_version: manifest.plugin_version, // inherited from Gemini's apodictic-plugin.lock; recorded, not re-pinned
     payload_asset: payloadAsset.name,

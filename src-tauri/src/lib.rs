@@ -1,5 +1,6 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use keyring::Entry;
+use rand::RngCore;
 use reqwest::blocking::Client;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
@@ -20,7 +21,11 @@ fn get_or_create_keychain_secret(
     match entry.get_password() {
         Ok(pw) => Ok(pw),
         Err(_) => {
-            let random_bytes: Vec<u8> = (0..length).map(|_| fastrand::u8(..)).collect();
+            // Cryptographically secure OS entropy — NOT fastrand (explicitly non-cryptographic).
+            // These bytes back the Stronghold vault key and the credential-encryption DEK, so a
+            // CSPRNG is required (Codex P1, 2026-06-19).
+            let mut random_bytes = vec![0u8; length];
+            rand::rngs::OsRng.fill_bytes(&mut random_bytes);
             let secret = BASE64.encode(&random_bytes);
             entry.set_password(&secret).map_err(|e| e.to_string())?;
             Ok(secret)
