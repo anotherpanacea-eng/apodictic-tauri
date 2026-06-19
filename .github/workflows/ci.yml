@@ -45,10 +45,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      # No token here: APODICTIC-Gemini is private, so the offline hash-verify runs and the remote
-      # freshness check is skipped (the script warns, doesn't fail). While the lock is in `bootstrap`
-      # state this is a no-op that keeps CI green; it becomes real gating once the lock is pinned.
+      # Pass the cross-repo token so the gate does REAL verification once the lock is pinned: a clean
+      # CI checkout has no vendored payload (gitignored), so --check verifies the committed lock against
+      # the PUBLISHED release manifest (hashes/sidecars/commit) + freshness — it does NOT silently pass
+      # (Codex P1 re-review, 2026-06-19). While the lock is `bootstrap` it's a no-op (nothing published).
       - run: node scripts/sync-gemini-web.mjs --check
+        env:
+          GEMINI_SYNC_TOKEN: ${{ secrets.GEMINI_SYNC_TOKEN }}
 
   # NOTE: a full `tauri build` smoke (against a synced macOS payload) turns on once APODICTIC-Gemini
   # publishes a desktop payload (Increment 2) and a GEMINI_SYNC_TOKEN secret is available. Windows

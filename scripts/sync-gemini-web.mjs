@@ -161,6 +161,35 @@ async function resolveCommit(tag) {
   return ref.object?.sha;
 }
 
+/** Download the small payload-manifest.json asset for a published tag (no big-binary pull). */
+async function fetchPublishedManifest(tag) {
+  const rel = await gh(`/repos/${REPO}/releases/tags/${encodeURIComponent(tag)}`);
+  const asset = (rel.assets || []).find((a) => a.name === MANIFEST_ASSET);
+  if (!asset) throw new Error(`release ${tag} has no ${MANIFEST_ASSET} asset`);
+  const res = await fetch(asset.url, {
+    headers: { Accept: "application/octet-stream", Authorization: `Bearer ${token()}`, "User-Agent": "apodictic-tauri-sync" },
+  });
+  if (!res.ok) throw new Error(`download ${MANIFEST_ASSET}: ${res.status}`);
+  return JSON.parse(await res.text());
+}
+
+/** Compare the committed lock's recorded hashes/commit to the published release manifest. */
+function compareLockToManifest(lock, manifest) {
+  const problems = [];
+  if (lock.dist_sha256 !== manifest.dist_sha256)
+    problems.push(`dist hash: lock ${lock.dist_sha256} != published ${manifest.dist_sha256}`);
+  if (lock.plugin_sha256 !== manifest.plugin_sha256)
+    problems.push(`plugin hash: lock ${lock.plugin_sha256} != published ${manifest.plugin_sha256}`);
+  const published = new Map((manifest.sidecars || []).map((s) => [s.target, s.sha256]));
+  for (const { target, sha256 } of lock.sidecars || []) {
+    if (published.get(target) !== sha256)
+      problems.push(`sidecar ${target}: lock ${sha256} != published ${published.get(target) ?? "(absent)"}`);
+  }
+  if (manifest.commit && lock.commit && manifest.commit !== lock.commit)
+    problems.push(`commit: lock ${lock.commit} != published manifest ${manifest.commit}`);
+  return problems;
+}
+
 async function doCheck() {
   const lock = readLock();
   if (!lock) {
@@ -177,48 +206,57 @@ async function doCheck() {
     process.exit(0);
   }
 
-  // 1) Offline byte-integrity. The vendored payload is gitignored / pulled on demand (large
-  // binaries), so in a fresh checkout (PR-time CI) it is ABSENT. Verify only when it's present;
-  // otherwise skip — integrity is enforced at sync time against the producer manifest, and the
-  // payload is re-pulled before any build. Without this skip a pinned lock made the gate fail
-  // forever in CI on a clean checkout (Codex P1, 2026-06-19).
+  // CONTENT verification. The vendored payload is gitignored / pulled on demand (large binaries),
+  // so a fresh checkout (PR-time CI) has it ABSENT. We must still verify — NOT silently pass (Codex
+  // P1, 2026-06-19, re-review): a clean checkout that exits 0 without verifying is false assurance.
   const payloadPresent =
     fs.existsSync(path.join(VENDOR, "dist")) || fs.existsSync(path.join(VENDOR, "binaries"));
-  const problems = payloadPresent ? verifyVendoredAgainstLock(lock) : [];
-  if (!payloadPresent) {
-    console.log(
-      "• vendored payload not present locally (gitignored; pulled on demand by `npm run sync:web`).\n" +
-        "  Offline byte-verify skipped — integrity is enforced at sync time against the producer manifest."
+  const problems = [];
+  let verifiedVia;
+
+  if (payloadPresent) {
+    // Strongest: recompute the on-disk bytes and match them to the lock.
+    problems.push(...verifyVendoredAgainstLock(lock));
+    verifiedVia = "local payload bytes";
+  } else if (token()) {
+    // Clean checkout: verify the committed lock against the PUBLISHED release manifest for its
+    // pinned tag (manifest-only download — fast, no big-binary pull, no working-tree mutation).
+    // apodictic-tauri CI provides GEMINI_SYNC_TOKEN, so CI always takes this real-verification path.
+    try {
+      const manifest = await fetchPublishedManifest(lock.tag);
+      problems.push(...compareLockToManifest(lock, manifest));
+      verifiedVia = "published release manifest";
+    } catch (e) {
+      problems.push(`could not verify the lock against the published release: ${e.message}`);
+    }
+  } else {
+    // No local payload AND no token → genuinely unverifiable. FAIL rather than falsely pass.
+    console.error(
+      "✗ cannot verify the pinned lock: no vendored payload present and no token.\n" +
+        "  Run `npm run sync:web` (pulls + verifies) or set GEMINI_SYNC_TOKEN to verify against the release."
     );
+    process.exit(1);
   }
 
-  // 2) Online (only if a token is available): is the lock behind the latest release?
+  // FRESHNESS + re-pointed-tag (token-only): is the lock behind latest, or has the tag moved?
   if (token()) {
     try {
       const rel = await latestRelease();
-      if (rel.tag_name !== lock.tag) {
+      if (rel.tag_name !== lock.tag)
         problems.push(`lock behind latest release: lock ${lock.tag} vs latest ${rel.tag_name}`);
-      } else {
-        // re-pointed-tag protection (cf. sync-plugin.mjs:154-159): compare the RESOLVED commit SHA.
-        const relCommit = await resolveCommit(rel.tag_name);
-        if (relCommit && lock.commit && relCommit !== lock.commit) {
-          problems.push(`tag ${lock.tag} re-pointed: release commit ${relCommit} != lock ${lock.commit}`);
-        }
-      }
+      const tagCommit = await resolveCommit(lock.tag);
+      if (tagCommit && lock.commit && lock.commit !== tagCommit)
+        problems.push(`tag ${lock.tag} re-pointed: lock commit ${lock.commit} != tag ${tagCommit}`);
     } catch (e) {
-      console.warn(`! remote freshness check skipped: ${e.message}`);
+      console.warn(`! freshness check skipped: ${e.message}`);
     }
-  } else {
-    // Offline (e.g. PR-time CI without a token): bytes-match-lock is verified above; "behind latest"
-    // freshness is the weekly sync workflow's job, which opens the bump PR.
-    console.warn("! no token — offline byte-verify only; freshness is the weekly sync workflow's job.");
   }
 
   if (problems.length) {
     console.error("✗ drift detected:\n  - " + problems.join("\n  - "));
     process.exit(1);
   }
-  console.log(`✓ vendor/gemini-web/ matches gemini-web.lock (${lock.tag}).`);
+  console.log(`✓ gemini-web.lock verified against ${verifiedVia} (${lock.tag}).`);
 }
 
 async function doSync() {
