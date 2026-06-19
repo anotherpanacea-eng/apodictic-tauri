@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rust:
+    name: Rust shell (build + clippy)
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      # tauri-build validates that every externalBin/resources/frontendDist path in tauri.conf.json
+      # EXISTS on disk at build-script time — so cargo build/clippy fail without the vendored payload.
+      # In bootstrap (no payload published yet), synthesize a stub skeleton so the Rust still gets
+      # compiled + linted. Real bytes replace these once `npm run sync:web` runs (Increment 2). A full
+      # `tauri build` smoke against a *real* synced payload is gated behind Increment 2 + the token.
+      - name: Synthesize bootstrap payload skeleton (if no real payload synced)
+        run: |
+          mkdir -p vendor/gemini-web/dist vendor/gemini-web/apodictic-plugin vendor/gemini-web/binaries
+          [ -f vendor/gemini-web/dist/index.html ] || printf '<!doctype html><title>bootstrap stub</title>\n' > vendor/gemini-web/dist/index.html
+          [ -f vendor/gemini-web/apodictic-plugin/.bootstrap ] || printf 'bootstrap stub\n' > vendor/gemini-web/apodictic-plugin/.bootstrap
+          for t in aarch64-apple-darwin x86_64-apple-darwin; do
+            [ -f "vendor/gemini-web/binaries/app-sidecar-$t" ] || printf '#!/bin/sh\necho stub\n' > "vendor/gemini-web/binaries/app-sidecar-$t"
+          done
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo build
+
+  drift-gate:
+    name: Vendor drift gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # No token here: APODICTIC-Gemini is private, so the offline hash-verify runs and the remote
+      # freshness check is skipped (the script warns, doesn't fail). While the lock is in `bootstrap`
+      # state this is a no-op that keeps CI green; it becomes real gating once the lock is pinned.
+      - run: node scripts/sync-gemini-web.mjs --check
+
+  # NOTE: a full `tauri build` smoke (against a synced macOS payload) turns on once APODICTIC-Gemini
+  # publishes a desktop payload (Increment 2) and a GEMINI_SYNC_TOKEN secret is available. Windows
+  # build/smoke is gated behind a Windows runner — v1 is macOS-only (docs/architecture.md §5/§9-E).

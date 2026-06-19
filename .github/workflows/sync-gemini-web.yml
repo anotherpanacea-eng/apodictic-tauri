@@ -1,0 +1,64 @@
+name: Sync Gemini desktop payload
+
+# Keeps the vendored APODICTIC-Gemini desktop payload current with the latest *released* payload,
+# and opens a bump PR. Pure pull: Gemini publishes the desktop-payload release asset; this repo
+# vendors it (sync) behind gemini-web.lock + the drift gate.
+#
+# AUTH: APODICTIC-Gemini is PRIVATE. The default GITHUB_TOKEN is current-repo-scoped and cannot read
+# a sibling private repo's release assets. Provide a PAT / GitHub-App token as the GEMINI_SYNC_TOKEN
+# repo secret (cross-repo read on anotherpanacea-eng/APODICTIC-Gemini).
+
+on:
+  schedule:
+    - cron: "0 15 * * 1" # Mondays 15:00 UTC (an hour after the Gemini->apodictic sync)
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Gemini release ref to sync (tag, or 'latest' for newest release)"
+        required: false
+        default: "latest"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Vendor the latest Gemini desktop payload
+        env:
+          GEMINI_SYNC_TOKEN: ${{ secrets.GEMINI_SYNC_TOKEN }}
+          REF: ${{ github.event.inputs.ref || 'latest' }}
+        run: |
+          if [ "$REF" = "latest" ]; then
+            node scripts/sync-gemini-web.mjs
+          else
+            node scripts/sync-gemini-web.mjs "$REF"
+          fi
+
+      - name: Read pinned release
+        id: lock
+        run: |
+          echo "tag=$(node -p "require('./gemini-web.lock').tag")" >> "$GITHUB_OUTPUT"
+          echo "web=$(node -p "require('./gemini-web.lock').web_version")" >> "$GITHUB_OUTPUT"
+
+      - name: Open bump PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: chore/sync-gemini-web
+          commit-message: "Sync Gemini desktop payload to ${{ steps.lock.outputs.tag }} (web ${{ steps.lock.outputs.web }})"
+          title: "Sync Gemini desktop payload to ${{ steps.lock.outputs.tag }}"
+          body: |
+            Automated sync to the latest released APODICTIC-Gemini desktop payload.
+
+            - **Release:** ${{ steps.lock.outputs.tag }}
+            - **Web version:** ${{ steps.lock.outputs.web }}
+            - Updated `gemini-web.lock` (per-target sidecar hashes). The vendored payload bytes are
+              gitignored; CI re-pulls + verifies via the drift gate.
