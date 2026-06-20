@@ -1,0 +1,17 @@
+{
+  "name": "apodictic-tauri",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Desktop shell for the APODICTIC Development Editor — a Tauri 2 build that wraps the APODICTIC-Gemini web app for local, private, file-system-aware use.",
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "sync:web": "node scripts/sync-gemini-web.mjs",
+    "sync:web:check": "node scripts/sync-gemini-web.mjs --check",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "npm run sync:web && tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.10.1"
+  }
+}

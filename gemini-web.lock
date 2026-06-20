@@ -1,0 +1,14 @@
+{
+  "repo": "anotherpanacea-eng/APODICTIC-Gemini",
+  "status": "bootstrap",
+  "_comment": "BOOTSTRAP — APODICTIC-Gemini has not yet published a desktop payload (migration Increment 2, docs/architecture.md §5). The drift gate (scripts/sync-gemini-web.mjs --check) is a no-op while status=bootstrap. Running `npm run sync:web` against a Gemini release that ships a desktop-payload asset will replace this with a pinned lock (status=pinned, tag/commit/web_version/plugin_version + per-target sidecar hashes). Do NOT hand-edit — run the sync script.",
+  "tag": null,
+  "commit": null,
+  "web_version": null,
+  "plugin_version": null,
+  "payload_asset": null,
+  "dist_sha256": null,
+  "plugin_sha256": null,
+  "sidecars": [],
+  "source": "https://github.com/anotherpanacea-eng/APODICTIC-Gemini/releases"
+}

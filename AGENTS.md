@@ -70,9 +70,12 @@ caught three blocking transport/sequencing issues before any code was written �
 - `scripts/sync-gemini-web.mjs` pulls the pinned Gemini desktop-payload **release asset** (not a
   git tarball — the payload is uncommitted build artifacts), verifies every hash against the
   producer's `payload-manifest.json`, writes `vendor/gemini-web/`, and records `gemini-web.lock`.
-- `scripts/sync-gemini-web.mjs --check` is the **drift gate** (CI-blocking): non-zero if the lock
-  is behind the latest Gemini release or any vendored hash ≠ the lock. It compares the resolved
-  **commit**, not just the tag, to catch a re-pointed tag.
+- `scripts/sync-gemini-web.mjs --check` is the **drift gate**. It always re-computes the vendored
+  `dist/` + `apodictic-plugin/` tree hashes and each sidecar hash and fails if they ≠ the lock
+  (offline byte-integrity). **Only when a token is present** (not PR-time CI) does it also check the
+  lock is behind the latest release — comparing the resolved **commit SHA**, not just the tag, to
+  catch a re-pointed tag. "Behind latest" freshness is otherwise the weekly sync workflow's job (it
+  opens the bump PR). While `gemini-web.lock` is in `bootstrap` state the gate is a no-op (exit 0).
 - Run `sync:web` before `desktop:build` — `frontendDist`/`externalBin`/`resources` resolve to
   `vendor/gemini-web/`, and there is no fallback build-from-source path.
 

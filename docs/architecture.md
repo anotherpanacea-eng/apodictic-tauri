@@ -114,10 +114,15 @@ GitHub _release assets_** (`/releases/.../assets`), not a tarball. Do **not** li
   (`{ web_version, plugin_version, per-target sidecar entries with sha256, dist_sha256, plugin_sha256 }`).
   **This producer pipeline does not exist yet — see §5 Increment 2.**
 - **Consumer (`apodictic-tauri`):**
-  - `gemini-web.lock` — `{ repo, tag, commit, web_version, plugin_version, payload_asset, payload_sha256,
-    sidecars: [{ target, sha256 }], dist_sha256, plugin_sha256, source }`. **Per-target sidecar hashes**
-    (S2) so a single missing/corrupt arch is detectable; `payload_sha256` is over the **archive bytes** with
-    a defined canonical form (the archive itself), not an ad-hoc multi-file digest.
+  - `gemini-web.lock` — `{ repo, tag, commit, web_version, plugin_version, payload_asset,
+    dist_sha256, plugin_sha256, sidecars: [{ target, sha256 }], status, source }`. **Per-component
+    hashes, no separate archive `payload_sha256`** (reconciled w/ the implementation, S4):
+    `dist_sha256`/`plugin_sha256` are **canonical tree hashes** — files in sorted POSIX-relative-path
+    order, each contributing `path\0<bytes>\0` to a single sha256 (`hashTree` in
+    `scripts/sync-gemini-web.mjs`; the producer's `payload-manifest.json` MUST match). Per-target
+    sidecar hashes (S2) so a single missing/corrupt arch is detectable. `--check` **recomputes** these
+    from the bytes on disk (it does not trust the manifest's self-reported values — S3). `commit` is
+    the **resolved tag SHA** (not `target_commitish`, which is often a branch name).
   - `plugin_version` in the payload **inherits** Gemini's own `apodictic-plugin.lock` pin — Gemini is the
     single source of truth for which plugin version ships; the Tauri lock records it for visibility but does
     not independently re-pin it (S2, avoid a double source of truth).
@@ -148,7 +153,7 @@ double-bundle.
 **Sidecar vendoring (decided — was §9-A):** vendor Gemini's **pre-built** per-target sidecar binaries
 (Gemini already builds them via `build-sidecar.mjs`). Caveat (S3): on macOS the sidecar binary is **signed +
 notarized downstream at `tauri build` time in _this_ repo**, so the shipped bytes ≠ the vendored bytes; the
-`payload_sha256`/per-target hashes therefore attest the **unsigned input** only, and a verification checkbox
+per-component/per-target hashes therefore attest the **unsigned input** only, and a verification checkbox
 is needed that Gatekeeper accepts a notarized outer app spawning the separately-signed `externalBin`
 (§7, §8). Vendoring server *source* + building the sidecar in Tauri CI is rejected — it re-introduces the
 build dependency the split is meant to remove.

@@ -1,0 +1,44 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "APODICTIC",
+  "version": "0.1.0",
+  "identifier": "com.anotherpanacea.apodictic",
+  "build": {
+    "frontendDist": "../vendor/gemini-web/dist",
+    "devUrl": "http://localhost:3000"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "APODICTIC",
+        "width": 1280,
+        "height": 860,
+        "minWidth": 960,
+        "minHeight": 640,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "externalBin": [
+      "../vendor/gemini-web/binaries/app-sidecar"
+    ],
+    "resources": {
+      "../vendor/gemini-web/apodictic-plugin": "apodictic-plugin",
+      "../vendor/gemini-web/dist": "dist"
+    },
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}
