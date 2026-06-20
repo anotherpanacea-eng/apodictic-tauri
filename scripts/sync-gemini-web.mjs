@@ -33,6 +33,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -161,32 +162,61 @@ async function resolveCommit(tag) {
   return ref.object?.sha;
 }
 
-/** Download the small payload-manifest.json asset for a published tag (no big-binary pull). */
-async function fetchPublishedManifest(tag) {
-  const rel = await gh(`/repos/${REPO}/releases/tags/${encodeURIComponent(tag)}`);
-  const asset = (rel.assets || []).find((a) => a.name === MANIFEST_ASSET);
-  if (!asset) throw new Error(`release ${tag} has no ${MANIFEST_ASSET} asset`);
-  const res = await fetch(asset.url, {
-    headers: { Accept: "application/octet-stream", Authorization: `Bearer ${token()}`, "User-Agent": "apodictic-tauri-sync" },
-  });
-  if (!res.ok) throw new Error(`download ${MANIFEST_ASSET}: ${res.status}`);
-  return JSON.parse(await res.text());
+/**
+ * Download a release's desktop-payload assets into destDir and extract the tar there. Returns
+ * { payloadAsset, manifest }. Shared by doSync (destDir = VENDOR) and doCheck (destDir = a temp dir).
+ * Throws if the release carries no desktop payload.
+ */
+async function downloadAndExtractPayload(rel, destDir) {
+  const assets = rel.assets || [];
+  const payloadAsset = assets.find((a) => a.name.startsWith(PAYLOAD_ASSET_PREFIX));
+  const manifestAsset = assets.find((a) => a.name === MANIFEST_ASSET);
+  if (!payloadAsset || !manifestAsset) {
+    throw new Error(
+      `release ${rel.tag_name} has no desktop payload (need '${PAYLOAD_ASSET_PREFIX}*' + '${MANIFEST_ASSET}') — ` +
+        `the producer pipeline (APODICTIC-Gemini, migration Increment 2) has not shipped one. See docs/architecture.md §5.`
+    );
+  }
+  fs.mkdirSync(destDir, { recursive: true });
+  const dl = async (asset, dest) => {
+    const res = await fetch(asset.url, {
+      headers: { Accept: "application/octet-stream", Authorization: `Bearer ${token()}`, "User-Agent": "apodictic-tauri-sync" },
+    });
+    if (!res.ok) throw new Error(`download ${asset.name}: ${res.status}`);
+    fs.writeFileSync(dest, Buffer.from(await res.arrayBuffer()));
+  };
+  const archivePath = path.join(destDir, payloadAsset.name);
+  await dl(payloadAsset, archivePath);
+  await dl(manifestAsset, path.join(destDir, "payload-manifest.json"));
+  execFileSync("tar", ["-xzf", archivePath, "-C", destDir], { stdio: "inherit" });
+  fs.rmSync(archivePath, { force: true });
+  return { payloadAsset, manifest: JSON.parse(fs.readFileSync(path.join(destDir, "payload-manifest.json"), "utf8")) };
 }
 
-/** Compare the committed lock's recorded hashes/commit to the published release manifest. */
-function compareLockToManifest(lock, manifest) {
-  const problems = [];
-  if (lock.dist_sha256 !== manifest.dist_sha256)
-    problems.push(`dist hash: lock ${lock.dist_sha256} != published ${manifest.dist_sha256}`);
-  if (lock.plugin_sha256 !== manifest.plugin_sha256)
-    problems.push(`plugin hash: lock ${lock.plugin_sha256} != published ${manifest.plugin_sha256}`);
-  const published = new Map((manifest.sidecars || []).map((s) => [s.target, s.sha256]));
-  for (const { target, sha256 } of lock.sidecars || []) {
-    if (published.get(target) !== sha256)
-      problems.push(`sidecar ${target}: lock ${sha256} != published ${published.get(target) ?? "(absent)"}`);
+/** Recompute the payload's hashes FROM THE BYTES on disk (dist/plugin tree hashes + each sidecar). */
+function computePayloadHashes(dir) {
+  const sidecars = [];
+  const binDir = path.join(dir, "binaries");
+  if (fs.existsSync(binDir)) {
+    for (const f of fs.readdirSync(binDir).sort()) {
+      if (f.startsWith("app-sidecar-")) sidecars.push({ target: f.replace(/^app-sidecar-/, ""), sha256: sha256File(path.join(binDir, f)) });
+    }
   }
-  if (manifest.commit && lock.commit && manifest.commit !== lock.commit)
-    problems.push(`commit: lock ${lock.commit} != published manifest ${manifest.commit}`);
+  return { dist_sha256: hashTree(path.join(dir, "dist")), plugin_sha256: hashTree(path.join(dir, "apodictic-plugin")), sidecars };
+}
+
+/** Compare hashes recomputed from real payload BYTES to the committed lock. */
+function compareComputedToLock(lock, computed) {
+  const problems = [];
+  if (computed.dist_sha256 !== lock.dist_sha256)
+    problems.push(`dist tree hash: lock ${lock.dist_sha256} != published payload ${computed.dist_sha256}`);
+  if (computed.plugin_sha256 !== lock.plugin_sha256)
+    problems.push(`plugin tree hash: lock ${lock.plugin_sha256} != published payload ${computed.plugin_sha256}`);
+  const got = new Map(computed.sidecars.map((s) => [s.target, s.sha256]));
+  for (const { target, sha256 } of lock.sidecars || []) {
+    if (got.get(target) !== sha256)
+      problems.push(`sidecar ${target}: lock ${sha256} != published payload ${got.get(target) ?? "(absent)"}`);
+  }
   return problems;
 }
 
@@ -219,15 +249,23 @@ async function doCheck() {
     problems.push(...verifyVendoredAgainstLock(lock));
     verifiedVia = "local payload bytes";
   } else if (token()) {
-    // Clean checkout: verify the committed lock against the PUBLISHED release manifest for its
-    // pinned tag (manifest-only download — fast, no big-binary pull, no working-tree mutation).
-    // apodictic-tauri CI provides GEMINI_SYNC_TOKEN, so CI always takes this real-verification path.
+    // Clean checkout: verify the committed lock against the actual PUBLISHED PAYLOAD BYTES — download
+    // the payload, extract to a temp dir, recompute the tree/sidecar hashes from the bytes, and compare
+    // to the lock. NOT a manifest comparison: the manifest is a producer-asserted description of the
+    // payload, so a re-published/tampered release could carry a manifest that still agrees with the lock
+    // while the payload itself differs. Hashing the bytes is the only real integrity check (Codex P1,
+    // 2026-06-19). apodictic-tauri CI provides GEMINI_SYNC_TOKEN, so CI always takes this path.
+    let tmp;
     try {
-      const manifest = await fetchPublishedManifest(lock.tag);
-      problems.push(...compareLockToManifest(lock, manifest));
-      verifiedVia = "published release manifest";
+      const rel = await gh(`/repos/${REPO}/releases/tags/${encodeURIComponent(lock.tag)}`);
+      tmp = fs.mkdtempSync(path.join(os.tmpdir(), "gemini-web-verify-"));
+      await downloadAndExtractPayload(rel, tmp);
+      problems.push(...compareComputedToLock(lock, computePayloadHashes(tmp)));
+      verifiedVia = "published payload bytes";
     } catch (e) {
-      problems.push(`could not verify the lock against the published release: ${e.message}`);
+      problems.push(`could not verify the lock against the published payload: ${e.message}`);
+    } finally {
+      if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
     }
   } else {
     // No local payload AND no token → genuinely unverifiable. FAIL rather than falsely pass.
@@ -267,59 +305,28 @@ async function doSync() {
     process.exit(1);
   }
   const rel = await latestRelease();
-  const assets = rel.assets || [];
-  const payloadAsset = assets.find((a) => a.name.startsWith(PAYLOAD_ASSET_PREFIX));
-  const manifestAsset = assets.find((a) => a.name === MANIFEST_ASSET);
-  if (!payloadAsset || !manifestAsset) {
-    console.error(
-      `✗ Release ${rel.tag_name} has no desktop payload (need '${PAYLOAD_ASSET_PREFIX}*' + '${MANIFEST_ASSET}').\n` +
-        `  The producer pipeline (APODICTIC-Gemini, migration Increment 2) has not shipped a payload yet.\n` +
-        `  See docs/architecture.md §5.`
-    );
+  fs.rmSync(VENDOR, { recursive: true, force: true });
+  let payloadAsset, manifest;
+  try {
+    ({ payloadAsset, manifest } = await downloadAndExtractPayload(rel, VENDOR));
+  } catch (e) {
+    console.error("✗ " + e.message);
     process.exit(1);
   }
 
-  fs.rmSync(VENDOR, { recursive: true, force: true });
-  fs.mkdirSync(VENDOR, { recursive: true });
-
-  const dl = async (asset, dest) => {
-    const res = await fetch(asset.url, {
-      headers: { Accept: "application/octet-stream", Authorization: `Bearer ${token()}`, "User-Agent": "apodictic-tauri-sync" },
-    });
-    if (!res.ok) throw new Error(`download ${asset.name}: ${res.status}`);
-    fs.writeFileSync(dest, Buffer.from(await res.arrayBuffer()));
-  };
-
-  const archivePath = path.join(VENDOR, payloadAsset.name);
-  await dl(payloadAsset, archivePath);
-  await dl(manifestAsset, path.join(VENDOR, "payload-manifest.json"));
-
-  // Extract via system tar (no npm dep). Producer ships .tar.gz.
-  execFileSync("tar", ["-xzf", archivePath, "-C", VENDOR], { stdio: "inherit" });
-  fs.rmSync(archivePath, { force: true });
-
-  const manifest = JSON.parse(fs.readFileSync(path.join(VENDOR, "payload-manifest.json"), "utf8"));
-
   // Recompute hashes from the extracted bytes and verify them against the manifest's claims
   // (catches corruption/tampering in transit). The lock records the COMPUTED values.
-  const distHash = hashTree(path.join(VENDOR, "dist"));
-  const pluginHash = hashTree(path.join(VENDOR, "apodictic-plugin"));
+  const computed = computePayloadHashes(VENDOR);
+  const got = new Map(computed.sidecars.map((s) => [s.target, s.sha256]));
   const transit = [];
-  if (manifest.dist_sha256 && manifest.dist_sha256 !== distHash)
-    transit.push(`dist: manifest ${manifest.dist_sha256} != downloaded ${distHash}`);
-  if (manifest.plugin_sha256 && manifest.plugin_sha256 !== pluginHash)
-    transit.push(`plugin: manifest ${manifest.plugin_sha256} != downloaded ${pluginHash}`);
-  const sidecars = [];
-  for (const { target } of manifest.sidecars || []) {
-    const bin = path.join(VENDOR, "binaries", `app-sidecar-${target}`);
-    const claimed = (manifest.sidecars.find((s) => s.target === target) || {}).sha256;
-    if (!fs.existsSync(bin)) {
-      transit.push(`sidecar ${target}: missing from payload`);
-      continue;
-    }
-    const got = sha256File(bin);
-    if (claimed && claimed !== got) transit.push(`sidecar ${target}: manifest ${claimed} != downloaded ${got}`);
-    sidecars.push({ target, sha256: got });
+  if (manifest.dist_sha256 && manifest.dist_sha256 !== computed.dist_sha256)
+    transit.push(`dist: manifest ${manifest.dist_sha256} != downloaded ${computed.dist_sha256}`);
+  if (manifest.plugin_sha256 && manifest.plugin_sha256 !== computed.plugin_sha256)
+    transit.push(`plugin: manifest ${manifest.plugin_sha256} != downloaded ${computed.plugin_sha256}`);
+  for (const { target, sha256: claimed } of manifest.sidecars || []) {
+    if (!got.has(target)) transit.push(`sidecar ${target}: missing from payload`);
+    else if (claimed && claimed !== got.get(target))
+      transit.push(`sidecar ${target}: manifest ${claimed} != downloaded ${got.get(target)}`);
   }
   // Bind the payload to the release tag's commit (Codex P1, 2026-06-19): the producer stamps
   // manifest.commit with the commit it built from; require it to equal the tag's resolved commit,
@@ -343,9 +350,9 @@ async function doSync() {
     web_version: manifest.web_version,
     plugin_version: manifest.plugin_version, // inherited from Gemini's apodictic-plugin.lock; recorded, not re-pinned
     payload_asset: payloadAsset.name,
-    dist_sha256: distHash,
-    plugin_sha256: pluginHash,
-    sidecars,
+    dist_sha256: computed.dist_sha256,
+    plugin_sha256: computed.plugin_sha256,
+    sidecars: computed.sidecars,
     status: "pinned",
     source: `https://github.com/${REPO}/releases/tag/${rel.tag_name}`,
   };
