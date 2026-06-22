@@ -305,7 +305,11 @@ async function doSync() {
     process.exit(1);
   }
   const rel = await latestRelease();
-  fs.rmSync(VENDOR, { recursive: true, force: true });
+  // Clear only the gitignored payload contents, NOT the whole dir — vendor/gemini-web/README.md is
+  // a committed file (explains the dir); a wholesale rmSync(VENDOR) would delete it on every sync.
+  for (const p of ["dist", "binaries", "apodictic-plugin", "payload-manifest.json"]) {
+    fs.rmSync(path.join(VENDOR, p), { recursive: true, force: true });
+  }
   let payloadAsset, manifest;
   try {
     ({ payloadAsset, manifest } = await downloadAndExtractPayload(rel, VENDOR));
