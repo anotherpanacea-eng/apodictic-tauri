@@ -34,6 +34,17 @@ is the PR review step (don't merge out from under it); version bumps at merge. (
 **Protect-public-only:** this is a **private** repo, so no branch protection is configured (the
 fleet only protects the public repos). The Codex review gate is still observed by convention.
 
+**Cloud-reachable coordination hub** (added 2026-07-19):
+[`anotherpanacea-eng/fleet-coordination`](https://github.com/anotherpanacea-eng/fleet-coordination)
+carries the fleet's code-safe cross-machine layer — task handoff packets
+(`handoffs/`), the live code-safe status board (`STATUS.md`), the portable
+fleet briefing (`PROJECT-SUMMARY.md`), and the sanitized build/review
+preflight. Unlike the Dropbox hub, **cloud threads can read it** — check its
+`STATUS.md` and `handoffs/` before flagging missing cross-repo context. Hard
+data boundary (CI-enforced leak gate): branch/commit refs, aggregates, and
+whole-artifact hashes only — never corpus prose, per-unit identifiers,
+private machine paths, or keys.
+
 **Fuller cross-repo context** (backlog, topology, the architecture spec, deep lessons) lives in
 the maintainer's local `Cowork/repo-fleet/` hub — **not reachable from cloud containers** (which
 hold only this one git repo). The architecture + migration plan also lives in-repo at
