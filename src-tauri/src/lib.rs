@@ -2,6 +2,7 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use keyring::Entry;
 use rand::RngCore;
 use reqwest::blocking::Client;
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -10,6 +11,17 @@ use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 
 const APP_ID: &str = "com.anotherpanacea.apodictic";
+
+#[derive(Debug, Deserialize)]
+struct SidecarHealth {
+    runtime_mode: Option<String>,
+    bind_scope: Option<String>,
+}
+
+fn is_expected_local_health(health: &SidecarHealth) -> bool {
+    health.runtime_mode.as_deref() == Some("local")
+        && health.bind_scope.as_deref() == Some("loopback")
+}
 
 /// Securely get an existing 32-byte B64 string from OS Keychain, or generate a high-entropy one.
 fn get_or_create_keychain_secret(
@@ -75,9 +87,10 @@ fn start_sidecar(app: &AppHandle) -> Result<(), String> {
             "PUBLIC_RESOURCES_PATH",
             pub_resources_dir.to_string_lossy().to_string(),
         )
+        .env("APODICTIC_RUNTIME_MODE", "local")
         .env("CREDENTIAL_ENCRYPTION_KEY", dek);
 
-    let (mut rx, mut _child) = sidecar_command
+    let (mut rx, child) = sidecar_command
         .spawn()
         .map_err(|e| format!("Failed to spawn sidecar: {}", e))?;
 
@@ -103,14 +116,31 @@ fn start_sidecar(app: &AppHandle) -> Result<(), String> {
         attempts += 1;
         if let Ok(res) = client.get("http://127.0.0.1:3001/api/health").send() {
             if res.status().is_success() {
-                println!("[Main] Sidecar healthy!");
-                break;
+                match res.json::<SidecarHealth>() {
+                    Ok(health) if is_expected_local_health(&health) => {
+                        println!("[Main] Sidecar healthy in local/loopback mode!");
+                        break;
+                    }
+                    Ok(_) | Err(_) => {
+                        let kill_error = child.kill().err();
+                        let suffix = kill_error
+                            .map(|error| format!(" Failed to stop incompatible sidecar: {error}"))
+                            .unwrap_or_default();
+                        return Err(format!(
+                            "Sidecar runtime contract mismatch; expected local/loopback health.{suffix}"
+                        ));
+                    }
+                }
             }
         }
         if attempts > 60 {
             // Give up after 30 seconds
             eprintln!("[Main] Sidecar failed to report healthy within 30 seconds");
-            return Err("Sidecar health check failed".to_string());
+            let kill_error = child.kill().err();
+            let suffix = kill_error
+                .map(|error| format!(" Failed to stop unhealthy sidecar: {error}"))
+                .unwrap_or_default();
+            return Err(format!("Sidecar health check failed.{suffix}"));
         }
         std::thread::sleep(Duration::from_millis(500));
     }
@@ -162,4 +192,25 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_expected_local_health, SidecarHealth};
+
+    #[test]
+    fn accepts_only_exact_local_loopback_health() {
+        assert!(is_expected_local_health(&SidecarHealth {
+            runtime_mode: Some("local".to_string()),
+            bind_scope: Some("loopback".to_string()),
+        }));
+        assert!(!is_expected_local_health(&SidecarHealth {
+            runtime_mode: Some("hosted".to_string()),
+            bind_scope: Some("all_interfaces".to_string()),
+        }));
+        assert!(!is_expected_local_health(&SidecarHealth {
+            runtime_mode: None,
+            bind_scope: None,
+        }));
+    }
 }
