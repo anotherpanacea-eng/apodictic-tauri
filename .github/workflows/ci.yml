@@ -23,22 +23,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # Compile against the published bytes, not stubs: the runtime mode contract lives in the
-      # sidecar executable and source-only Rust checks cannot prove that the pinned payload honors it.
-      - name: Sync latest desktop payload
+      # Compile against the published bytes pinned by gemini-web.lock, not stubs or a moving latest
+      # release. The separate drift-gate job owns freshness enforcement.
+      - name: Sync pinned desktop payload
         working-directory: ${{ github.workspace }} # override the job's src-tauri default — paths are repo-root-relative
-        run: node scripts/sync-gemini-web.mjs
+        run: node scripts/sync-gemini-web.mjs --pinned
         env:
           GEMINI_SYNC_TOKEN: ${{ secrets.GEMINI_SYNC_TOKEN }}
-      - name: Require committed lock to match synced release
+      - name: Require downloaded bytes to match committed lock
         working-directory: ${{ github.workspace }}
         run: git diff --exit-code -- gemini-web.lock
-      - name: Verify vendored sidecar runtime contract
-        working-directory: ${{ github.workspace }}
-        run: node scripts/verify-sidecar-runtime.mjs
       - run: cargo test
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo build
+      - name: Verify vendored sidecar runtime contract
+        working-directory: ${{ github.workspace }}
+        run: node scripts/verify-sidecar-runtime.mjs
 
   drift-gate:
     name: Vendor drift gate

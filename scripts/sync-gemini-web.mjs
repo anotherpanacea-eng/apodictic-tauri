@@ -22,6 +22,7 @@
  * Usage:
  *   node scripts/sync-gemini-web.mjs           # vendor the latest Gemini release payload, write the lock
  *   node scripts/sync-gemini-web.mjs v0.3.0    # vendor a specific tag
+ *   node scripts/sync-gemini-web.mjs --pinned  # re-vendor the tag already recorded in the lock
  *   node scripts/sync-gemini-web.mjs --check   # drift gate: lock behind latest? vendored hashes != lock? -> exit 1
  *
  * Env:
@@ -48,7 +49,17 @@ const LOCK = path.join(repoRoot, "gemini-web.lock");
 
 const args = process.argv.slice(2);
 const CHECK = args.includes("--check");
-const explicitTag = args.find((a) => !a.startsWith("--"));
+const PINNED = args.includes("--pinned");
+const unknownFlags = args.filter((arg) => arg.startsWith("--") && !["--check", "--pinned"].includes(arg));
+const positionalTags = args.filter((arg) => !arg.startsWith("--"));
+const explicitTag = positionalTags[0];
+
+if (unknownFlags.length || positionalTags.length > 1 || (CHECK && (PINNED || explicitTag)) || (PINNED && explicitTag)) {
+  console.error(
+    "✗ Invalid arguments. Use one of: no arguments, one explicit tag, --pinned, or --check."
+  );
+  process.exit(2);
+}
 
 function token() {
   return process.env.GEMINI_SYNC_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_TOKEN || "";
@@ -143,8 +154,13 @@ function verifyVendoredAgainstLock(lock) {
   return problems;
 }
 
-async function latestRelease() {
+async function selectedRelease() {
   if (explicitTag) return gh(`/repos/${REPO}/releases/tags/${explicitTag}`);
+  if (PINNED) {
+    const lock = readLock();
+    if (!lock?.tag) throw new Error("gemini-web.lock has no pinned tag");
+    return gh(`/repos/${REPO}/releases/tags/${encodeURIComponent(lock.tag)}`);
+  }
   return gh(`/repos/${REPO}/releases/latest`);
 }
 
@@ -279,7 +295,7 @@ async function doCheck() {
   // FRESHNESS + re-pointed-tag (token-only): is the lock behind latest, or has the tag moved?
   if (token()) {
     try {
-      const rel = await latestRelease();
+      const rel = await gh(`/repos/${REPO}/releases/latest`);
       if (rel.tag_name !== lock.tag)
         problems.push(`lock behind latest release: lock ${lock.tag} vs latest ${rel.tag_name}`);
       const tagCommit = await resolveCommit(lock.tag);
@@ -304,7 +320,7 @@ async function doSync() {
     );
     process.exit(1);
   }
-  const rel = await latestRelease();
+  const rel = await selectedRelease();
   // Clear only the gitignored payload contents, NOT the whole dir — vendor/gemini-web/README.md is
   // a committed file (explains the dir); a wholesale rmSync(VENDOR) would delete it on every sync.
   for (const p of ["dist", "binaries", "apodictic-plugin", "payload-manifest.json"]) {
