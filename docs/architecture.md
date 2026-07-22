@@ -162,6 +162,18 @@ build dependency the split is meant to remove.
 
 ## 4. Provider model + local-LLM (forward roadmap — not in the extraction increment)
 
+The curated Hugging Face/local-model native boundary is now specified separately in
+`docs/hugging-face-native-install-boundary-spec.md`, paired with the Gemini sidecar's
+artifact-acquisition spec. It refines the roadmap without changing this ownership rule:
+Hugging Face transport and model/provider semantics stay in the sidecar; Tauri owns only the
+managed root, keychain chain, and trusted runtime process boundary.
+
+Apple Intelligence follows a second, non-Hugging-Face path in
+`docs/apple-intelligence-native-bridge-spike-spec.md`: the shell owns the signed Foundation
+Models bridge while the Gemini sidecar owns provider semantics, validation, receipts, and
+calibration. It is a public/synthetic feasibility spike until the exact OS/SDK/privacy gates
+clear.
+
 Per the reviewed GPT advice + the fleet corrections. **The provider abstraction lives in the shared engine
 (`server/`), not in `apodictic-tauri`.** Both web and desktop get local-LLM support, or the divergence
 problem returns.
