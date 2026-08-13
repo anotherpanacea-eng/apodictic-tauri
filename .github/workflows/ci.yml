@@ -3,10 +3,25 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   rust:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: Rust shell (build + clippy)
     runs-on: macos-latest
     defaults:
@@ -33,28 +48,20 @@ jobs:
       - name: Require downloaded bytes to match committed lock
         working-directory: ${{ github.workspace }}
         run: git diff --exit-code -- gemini-web.lock
+      # The pinned sync already downloaded and hash-verified the payload. Run
+      # freshness against those same bytes here instead of renting a second
+      # Linux runner to repeat the checkout and network work.
+      - name: Vendor drift gate
+        working-directory: ${{ github.workspace }}
+        run: node scripts/sync-gemini-web.mjs --check
+        env:
+          GEMINI_SYNC_TOKEN: ${{ secrets.GEMINI_SYNC_TOKEN }}
       - run: cargo test
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo build
       - name: Verify vendored sidecar runtime contract
         working-directory: ${{ github.workspace }}
         run: node scripts/verify-sidecar-runtime.mjs
-
-  drift-gate:
-    name: Vendor drift gate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      # Pass the cross-repo token so the gate does REAL verification once the lock is pinned: a clean
-      # CI checkout has no vendored payload (gitignored), so --check verifies the committed lock against
-      # the PUBLISHED release manifest (hashes/sidecars/commit) + freshness — it does NOT silently pass
-      # (Codex P1 re-review, 2026-06-19). While the lock is `bootstrap` it's a no-op (nothing published).
-      - run: node scripts/sync-gemini-web.mjs --check
-        env:
-          GEMINI_SYNC_TOKEN: ${{ secrets.GEMINI_SYNC_TOKEN }}
 
   # NOTE: the Rust job now executes the real pinned macOS sidecar contract. A full `tauri build`
   # installer smoke remains future work. Windows build/smoke is gated behind a Windows runner —
