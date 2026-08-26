@@ -6,6 +6,9 @@ file exists only so Claude Code's auto-load points you there.
 
 Read `AGENTS.md` first. In particular:
 
+- **`AGENTS.md` § Test value convention** — tests must protect behavior,
+  contracts, reproduced bugs, or stable safety boundaries; do not preserve
+  implementation-mirroring tests or production seams built only for tests.
 - **`AGENTS.md` § Fleet / cross-repo context** — this repo is a *consumer* desktop shell, not the
   engine. Never put analysis logic in the Rust/JS command layer.
 - **`AGENTS.md` § Vendor / consumer machinery** — `gemini-web.lock` + `scripts/sync-gemini-web.mjs
