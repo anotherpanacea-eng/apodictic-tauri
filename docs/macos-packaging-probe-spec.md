@@ -85,7 +85,7 @@ publication operation.
     `notarization_proven = false`, `sbom_complete = false`, `notices_complete = false`, and
     `m0_status = NO-GO`. Additional keys or wrong types fail receipt validation.
 11. Receipt strings are rejected if they contain the repository's absolute path, the home
-    directory, the current username, or any absolute POSIX path. Validation walks every value
+    directory, or any absolute POSIX path. Validation walks every value
     recursively before atomic write. The receipt is constructed only from enumerated scalar/array
     facts and contains no captured tool output, environment values, file contents, user data,
     per-resource inventory, or duplicated fleet blocker list.

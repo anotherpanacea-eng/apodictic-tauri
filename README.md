@@ -53,6 +53,28 @@ npm run desktop:build     # tauri build against the vendored payload
 **v1 is macOS-only** (the Windows sidecar cannot be cross-compiled and needs a Windows CI
 runner — gated; see `docs/architecture.md` §5/§9-E).
 
+## macOS packaging probe
+
+The packaging probe is a deliberately local, host-architecture evidence check. It verifies an
+already-staged pinned Gemini payload, runs the sidecar runtime check, assembles one unsigned
+macOS `.app` with the proposed macOS 14 floor, and verifies the bundle before writing a small
+code-safe receipt. The app and receipt remain below the ignored
+`src-tauri/target/packaging-probes/` directory. No artifact is published or distributed.
+
+The probe requires macOS, a clean tracked worktree, installed project dependencies, and staged
+`vendor/gemini-web/` bytes that already match `gemini-web.lock`. It rejects inherited sync,
+signing, provider, and application credentials even when a variable is defined as an empty string.
+After staging the payload separately, clear those credential variables and invoke the explicit gate:
+
+```bash
+INTERNAL_PACKAGING_PROBE=1 npm run packaging:probe
+```
+
+The resulting receipt records only build and bundle facts. Its fixed `M0` status is `NO-GO`;
+the probe does not change any distribution, signing, notarization, updater, licensing, SBOM,
+notices, local-authority, CSP, or hosted-surface gate. See
+[`docs/macos-packaging-probe-spec.md`](docs/macos-packaging-probe-spec.md) for the full boundary.
+
 ## Fleet
 
 `apodictic-tauri` is fleet member #5 — **consumer · private · Rust + TS**. The fleet workflow

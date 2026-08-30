@@ -32,11 +32,12 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { hashTree, sha256File } from "./lib/canonical-tree-hash.mjs";
 
 const REPO = "anotherpanacea-eng/APODICTIC-Gemini";
 const API = "https://api.github.com";
@@ -68,38 +69,6 @@ function token() {
 function readLock() {
   if (!fs.existsSync(LOCK)) return null;
   return JSON.parse(fs.readFileSync(LOCK, "utf8"));
-}
-
-function sha256File(p) {
-  return createHash("sha256").update(fs.readFileSync(p)).digest("hex");
-}
-
-/**
- * Canonical tree hash (the producer-consumer contract for dist/ and apodictic-plugin/).
- * Walk files in sorted POSIX-relative-path order; hash `path\0<filebytes>\0` for each. The
- * producer's payload-manifest.json MUST compute dist_sha256/plugin_sha256 the same way. This is
- * a REAL recompute over the bytes on disk (not trusting the manifest's self-reported hash — S3).
- */
-function hashTree(dir) {
-  if (!fs.existsSync(dir)) return null;
-  const files = [];
-  (function walk(d, rel) {
-    for (const name of fs.readdirSync(d).sort()) {
-      const abs = path.join(d, name);
-      const r = rel ? `${rel}/${name}` : name;
-      if (fs.statSync(abs).isDirectory()) walk(abs, r);
-      else files.push([r, abs]);
-    }
-  })(dir, "");
-  files.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-  const h = createHash("sha256");
-  for (const [r, abs] of files) {
-    h.update(r);
-    h.update("\0");
-    h.update(fs.readFileSync(abs));
-    h.update("\0");
-  }
-  return h.digest("hex");
 }
 
 async function gh(urlPath) {
