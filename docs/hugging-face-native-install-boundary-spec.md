@@ -1,6 +1,9 @@
 # Spec — native boundary for curated local-model installation
 
-**Status:** decision-complete boundary; not built.
+**Status:** future hardened multi-model boundary; not built. The Qwen-only MVP is owned by the
+Gemini sidecar under `local-provider-cutover-spec.md`. Do not implement or run this broker
+beside that route. A future M6 must choose one process owner and must treat the MVP llama.cpp
+cache as opaque unless it explicitly revalidates and migrates it into the curated registry.
 **Date:** 2026-07-21.
 **Owner:** `apodictic-tauri` native shell only.
 **Paired engine spec:** `APODICTIC-Gemini/docs/hugging-face-artifact-acquisition-spec.md`.
