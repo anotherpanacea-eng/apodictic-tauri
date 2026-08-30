@@ -62,9 +62,9 @@ code-safe receipt. The app and receipt remain below the ignored
 `src-tauri/target/packaging-probes/` directory. No artifact is published or distributed.
 
 The probe requires macOS, a clean tracked worktree, installed project dependencies, and staged
-`vendor/gemini-web/` bytes that already match `gemini-web.lock`. It rejects inherited sync,
-signing, provider, and application credentials even when a variable is defined as an empty string.
-After staging the payload separately, clear those credential variables and invoke the explicit gate:
+`vendor/gemini-web/` bytes that already match `gemini-web.lock`. Its child processes receive only
+the small environment allowlist needed to build and verify, so sync, signing, provider, and
+application credentials are not forwarded. Invoke the explicit gate with:
 
 ```bash
 INTERNAL_PACKAGING_PROBE=1 npm run packaging:probe

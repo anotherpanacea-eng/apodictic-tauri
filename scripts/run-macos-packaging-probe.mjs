@@ -5,7 +5,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { expectedHostTarget } from "./verify-macos-packaging-probe.mjs";
+import {
+  expectedHostTarget,
+  verifyBundleAndConstructReceipt,
+} from "./verify-macos-packaging-probe.mjs";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(scriptPath), "..");
@@ -13,34 +16,7 @@ const outputRoot = path.join(repoRoot, "src-tauri", "target", "packaging-probes"
 const overlayPath = path.join(repoRoot, "src-tauri", "tauri.packaging-probe.conf.json");
 const syncScript = path.join(repoRoot, "scripts", "sync-gemini-web.mjs");
 const sidecarVerifier = path.join(repoRoot, "scripts", "verify-sidecar-runtime.mjs");
-const bundleVerifier = path.join(repoRoot, "scripts", "verify-macos-packaging-probe.mjs");
 const lockPath = path.join(repoRoot, "gemini-web.lock");
-
-export const FORBIDDEN_CREDENTIALS = Object.freeze([
-  "GEMINI_SYNC_TOKEN",
-  "GH_TOKEN",
-  "GITHUB_TOKEN",
-  "APPLE_CERTIFICATE",
-  "APPLE_CERTIFICATE_PASSWORD",
-  "APPLE_SIGNING_IDENTITY",
-  "APPLE_API_KEY",
-  "APPLE_API_ISSUER",
-  "APPLE_API_KEY_PATH",
-  "AC_API_KEY_ID",
-  "AC_API_ISSUER_ID",
-  "AC_API_KEY",
-  "TAURI_SIGNING_PRIVATE_KEY",
-  "TAURI_SIGNING_PRIVATE_KEY_PASSWORD",
-  "GOOGLE_APPLICATION_CREDENTIALS",
-  "GOOGLE_CLIENT_ID",
-  "GOOGLE_CLIENT_SECRET",
-  "CREDENTIAL_ENCRYPTION_KEY",
-  "GEMINI_API_KEY",
-  "OPENAI_API_KEY",
-  "ANTHROPIC_API_KEY",
-  "GPT_ACTIONS_API_KEY",
-  "ARTIFACT_SIGNING_SECRET",
-]);
 
 const CHILD_ENV_ALLOWLIST = Object.freeze([
   "PATH",
@@ -59,10 +35,6 @@ const CHILD_ENV_ALLOWLIST = Object.freeze([
 
 function fail(message) {
   throw new Error(message);
-}
-
-export function definedForbiddenCredentials(environment = process.env) {
-  return FORBIDDEN_CREDENTIALS.filter((name) => Object.prototype.hasOwnProperty.call(environment, name));
 }
 
 export function childEnvironment(targetDirectory, environment = process.env) {
@@ -86,6 +58,27 @@ function run(commandPath, args, env, options = {}) {
   if (result.signal) fail(`${path.basename(commandPath)} terminated by signal ${result.signal}`);
   if (result.status !== 0) fail(`${options.label || path.basename(commandPath)} failed`);
   return options.capture ? (result.stdout || "") : "";
+}
+
+function cleanTrackedTree(env) {
+  const trackedChanges = run("/usr/bin/git", ["status", "--porcelain=v1", "--untracked-files=no"], env, {
+    capture: true,
+    label: "tracked worktree check",
+  });
+  if (trackedChanges.trim()) fail("tracked worktree is not clean; commit or restore tracked changes before probing");
+}
+
+function currentHead(env) {
+  const head = run("/usr/bin/git", ["rev-parse", "HEAD"], env, {
+    capture: true,
+    label: "source commit check",
+  }).trim();
+  if (!/^[0-9a-f]{40}$/.test(head)) fail("source commit check returned a malformed commit");
+  return head;
+}
+
+function writeReceipt(receiptPath, receipt) {
+  fs.writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });
 }
 
 function ensureRealDirectory(directory, create) {
@@ -171,17 +164,12 @@ function resolveTauriCli() {
 function main() {
   if (process.argv.length !== 2) fail("packaging probe accepts no arguments");
   if (process.env.INTERNAL_PACKAGING_PROBE !== "1") fail("set INTERNAL_PACKAGING_PROBE=1 to invoke the packaging probe explicitly");
-  const forbidden = definedForbiddenCredentials();
-  if (forbidden.length) fail(`forbidden credential variables are defined: ${forbidden.join(", ")}`);
 
   const host = expectedHostTarget();
   const { resolvedRoot, resolvedRun } = prepareRunDirectory();
   const env = childEnvironment(resolvedRun);
-  const trackedChanges = run("/usr/bin/git", ["status", "--porcelain=v1", "--untracked-files=no"], env, {
-    capture: true,
-    label: "tracked worktree check",
-  });
-  if (trackedChanges.trim()) fail("tracked worktree is not clean; commit or restore tracked changes before probing");
+  cleanTrackedTree(env);
+  const sourceCommit = currentHead(env);
 
   requireStagedPayload(host.targetTriple);
   requireRegularFile(overlayPath, "packaging-probe Tauri overlay");
@@ -214,9 +202,16 @@ function main() {
       fail("produced app escapes the quarantined packaging-probe output");
     }
   }
-  run(process.execPath, [bundleVerifier, appPath, host.targetTriple, receiptPath], env, {
-    label: "packaging-probe bundle verifier",
-  });
+  const receipt = verifyBundleAndConstructReceipt(
+    appPath,
+    host.targetTriple,
+    sourceCommit,
+    resolvedRun,
+    env,
+  );
+  if (currentHead(env) !== sourceCommit) fail("source commit changed while the packaging probe was running");
+  cleanTrackedTree(env);
+  writeReceipt(receiptPath, receipt);
 
   console.log("✓ UNSIGNED-NON-DISTRIBUTABLE-PACKAGING-PROBE complete");
   console.log(`The app and receipt remain only under ignored local target output: ${path.relative(repoRoot, resolvedRun)}`);
