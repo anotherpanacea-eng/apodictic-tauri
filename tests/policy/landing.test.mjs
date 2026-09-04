@@ -130,7 +130,7 @@ test("stale-based standalone synthetic merge preserves both divergent sides", ()
 test("standalone authorization is explicit, current, and inventory-free", () => {
   const repository = "anotherpanacea-eng/apodictic-tauri";
   assert.equal(validateLandingAuthorization({ authorization: "standalone", headRepo: repository, headRef: "feature", labels: ["ci-ready"], inventoryPath: null }), "standalone");
-  assert.equal(validateLandingAuthorization({ authorization: "standalone", headRepo: "someone/fork", headRef: "feature", labels: ["CI-READY"], inventoryPath: null }), "standalone");
+  assert.throws(() => validateLandingAuthorization({ authorization: "standalone", headRepo: "someone/fork", headRef: "feature", labels: ["CI-READY"], inventoryPath: null }), /authorization/);
   assert.equal(validateLandingAuthorization({ authorization: "train", headRepo: repository, headRef: "train/weekly", labels: [], inventoryPath: "inventory.json" }), "train");
   for (const input of [
     { authorization: "standalone", headRepo: repository, headRef: "feature", labels: [], inventoryPath: null },

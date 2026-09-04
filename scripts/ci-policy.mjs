@@ -9,8 +9,8 @@ const expression = (value) => `\${{ ${value} }}`;
 
 export const WORKFLOW_POLICY = Object.freeze({
   runName: `apodictic-tauri-ci pr=${expression("github.event.pull_request.number")} action=${expression("github.event.action")} train=${expression("github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'train/')")} ci-ready-event=${expression("github.event.label.name == 'ci-ready'")}`,
-  concurrencyGroup: `apodictic-tauri-ci-${expression("github.event.pull_request.number")}-${expression(`(contains(fromJSON('["opened","synchronize","reopened","ready_for_review","converted_to_draft","closed"]'), github.event.action) || (!(github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'train/')) && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && github.event.label.name == 'ci-ready')) && 'clearance' || github.run_id`)}`,
-  jobIf: expression(`github.event.pull_request.draft == false && ((github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'train/') && contains(fromJSON('["opened","synchronize","reopened","ready_for_review"]'), github.event.action)) || (!(github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'train/')) && !(github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'chore/sync-gemini-web') && contains(github.event.pull_request.labels.*.name, 'ci-ready') && (contains(fromJSON('["opened","synchronize","reopened","ready_for_review"]'), github.event.action) || (github.event.action == 'labeled' && github.event.label.name == 'ci-ready'))))`),
+  concurrencyGroup: `apodictic-tauri-ci-${expression("github.event.pull_request.number")}-${expression(`(contains(fromJSON('["opened","synchronize","reopened","ready_for_review","converted_to_draft","closed"]'), github.event.action) || (github.event.pull_request.head.repo.full_name == github.repository && !startsWith(github.event.pull_request.head.ref, 'train/') && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && github.event.label.name == 'ci-ready')) && 'clearance' || github.run_id`)}`,
+  jobIf: expression(`github.event.pull_request.draft == false && ((github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'train/') && contains(fromJSON('["opened","synchronize","reopened","ready_for_review"]'), github.event.action)) || (github.event.pull_request.head.repo.full_name == github.repository && !startsWith(github.event.pull_request.head.ref, 'train/') && github.event.pull_request.head.ref != 'chore/sync-gemini-web' && contains(github.event.pull_request.labels.*.name, 'ci-ready') && (contains(fromJSON('["opened","synchronize","reopened","ready_for_review"]'), github.event.action) || (github.event.action == 'labeled' && github.event.label.name == 'ci-ready'))))`),
 });
 
 export function classifyPullRequest(input) {
@@ -27,7 +27,7 @@ export function classifyPullRequest(input) {
   const hasCiReady = labels.some((label) => same(label, "ci-ready"));
   const ciReadyEvent = same(eventLabel, "ci-ready") && ["labeled", "unlabeled"].includes(action);
   const armable = ARMABLE.has(action);
-  const standalone = !train && !sync;
+  const standalone = sameRepo && !train && !sync;
   const billable = input.draft === false && (
     (train && armable)
     || (standalone && hasCiReady && (armable || (action === "labeled" && ciReadyEvent)))
@@ -38,7 +38,7 @@ export function classifyPullRequest(input) {
   const canonical = ARMABLE.has(action)
     || action === "converted_to_draft"
     || action === "closed"
-    || (!train && labelEvent && ciReadyEvent);
+    || (standalone && labelEvent && ciReadyEvent);
   const noise = labelEvent && !canonical;
   return Object.freeze({
     action, authorized, billable, canonical, ciReadyEvent, hasCiReady, noise,

@@ -8,16 +8,17 @@ const repository = "anotherpanacea-eng/apodictic-tauri";
 function receipt(run = "100", attempt = "1") {
   return canonical({ base_sha: base, head_sha: head, job: "validate", repository, run_attempt: attempt, run_id: run, schema: "apodictic-tauri-pr-merge-binding/1", synthetic_merge_sha: merge });
 }
-function evidence({ train = true, labels = [], runs } = {}) {
+function evidence({ train = true, fork = false, labels = [], runs } = {}) {
   const pr = 7;
   const defaultRun = { id: "100", attempt: "1", event: "pull_request", path: ".github/workflows/ci.yml@refs/pull/7/merge", head_sha: head, display_title: `apodictic-tauri-ci pr=7 action=ready_for_review train=${train} ci-ready-event=false`, status: "completed", conclusion: "success", jobs: [{ name: "validate", status: "completed", conclusion: "success", log: `line\npr-merge-binding: ${receipt()}\n` }] };
-  return { schema: "apodictic-tauri-train-ci-evidence/1", repository, pr, base_ref: "main", base_sha: base, head_sha: head, current: { draft: false, head_repo: train ? repository : "fork/repo", head_ref: train ? "train/weekly" : "feature", labels: train ? labels : ["CI-READY", ...labels], merged: false, state: "open", base_ref: "main", base_sha: base, head_sha: head }, runs: runs ?? [defaultRun] };
+  return { schema: "apodictic-tauri-train-ci-evidence/1", repository, pr, base_ref: "main", base_sha: base, head_sha: head, current: { draft: false, head_repo: fork ? "fork/repo" : repository, head_ref: train ? "train/weekly" : "feature", labels: train ? labels : ["CI-READY", ...labels], merged: false, state: "open", base_ref: "main", base_sha: base, head_sha: head }, runs: runs ?? [defaultRun] };
 }
 
-test("train and fork standalone clear only on exact singleton receipts", () => {
+test("train and same-repository standalone clear only on exact singleton receipts", () => {
   const train = validateEvidence(evidence()); assert.equal(train.authorization, "train"); assert.equal(train.synthetic_merge_sha, merge);
   const standalone = validateEvidence(evidence({ train: false })); assert.equal(standalone.authorization, "standalone");
   assert.deepEqual(Object.keys(standalone).sort(), ["authorization", "base_ref", "base_sha", "head_sha", "job_count", "pr", "repository", "run_attempt", "run_id", "schema", "synthetic_merge_sha", "workflow_path"]);
+  assert.throws(() => validateEvidence(evidence({ train: false, fork: true })), /authorized/);
 });
 
 test("train label and unrelated standalone label noise must be completed skipped and logless", () => {

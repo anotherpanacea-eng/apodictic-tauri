@@ -138,7 +138,8 @@ normal merge policy.
 - Version/changelog work, when needed, is an explicitly inventoried and reviewed train-only commit
   made before freeze. The landing adds no bytes.
 - Promote the frozen train exactly once. It spends one full CI job per train; constituent drafts and
-  label noise consume no runner. `ci-ready` is reserved for a deliberate standalone exception.
+  label noise consume no runner. `ci-ready` is reserved for a deliberate same-repository standalone
+  exception; forks never authorize hosted CI.
 - Land only a live green receipt bound to exact base, head, singleton job, run attempt, and GitHub
   synthetic merge. Push `main` with an exact expected-head lease, prove containment/closure, and delete
   only unchanged same-repository branches under their own leases.
@@ -156,7 +157,8 @@ normal merge policy.
 
 `.github/workflows/ci.yml` is pull-request-only and has one bounded `macos-latest` validation job.
 It preserves payload sync/drift, packaging-policy, Rust test/clippy/build, and sidecar gates. Only a
-promoted same-repository train or explicit non-sync `ci-ready` standalone can run it; there is no
+promoted same-repository train or explicit same-repository non-sync `ci-ready` standalone can run it;
+fork events remain zero-step, and there is no
 duplicate push-to-main run. `.github/workflows/sync-gemini-web.yml` opens or updates the weekly payload
 bump PR as a draft and independently proves it remains draft and unarmed.
 

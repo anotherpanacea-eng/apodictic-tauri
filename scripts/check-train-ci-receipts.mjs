@@ -59,11 +59,12 @@ export function validateEvidence(evidence) {
   if (current.draft !== false || current.state !== "open" || current.merged !== false) throw new PolicyError("PR is not open, unmerged, and promoted");
   repositorySlug(current.head_repo, "head_repo");
   if (typeof current.head_ref !== "string" || !Array.isArray(current.labels) || current.labels.some((item) => typeof item !== "string")) throw new PolicyError("current PR identity is malformed");
-  const train = same(current.head_repo, repository) && TRAIN_PREFIX_RE.test(current.head_ref);
+  const sameRepo = same(current.head_repo, repository);
+  const train = sameRepo && TRAIN_PREFIX_RE.test(current.head_ref);
   if (train && !TRAIN_RE.test(current.head_ref)) throw new PolicyError("current train ref is not bounded and canonical");
-  const sync = same(current.head_repo, repository) && same(current.head_ref, SYNC_REF);
+  const sync = sameRepo && same(current.head_ref, SYNC_REF);
   const ciReady = current.labels.some((label) => same(label, "ci-ready"));
-  const authorization = train ? "train" : (!sync && ciReady ? "standalone" : null);
+  const authorization = train ? "train" : (sameRepo && !sync && ciReady ? "standalone" : null);
   if (!authorization) throw new PolicyError("current PR is not authorized");
   if (!Array.isArray(evidence.runs) || evidence.runs.length < 1) throw new PolicyError("runs must be nonempty");
   const seen = new Set(); const clearance = [];

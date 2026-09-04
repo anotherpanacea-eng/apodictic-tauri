@@ -45,6 +45,6 @@ draft" below. A train must complete every field before promotion.
 ## Standalone exception
 
 <!--
-Normally "Not applicable." A deliberately standalone PR must record current
+Normally "Not applicable." A deliberately standalone same-repository PR must record current
 `ci-ready` authorization and use the same live receipt and exact-base CAS gate.
 -->

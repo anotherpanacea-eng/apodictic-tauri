@@ -19,7 +19,11 @@ test("authorization table matches draft/train/standalone policy and case semanti
   }
   assert.equal(classifyPullRequest({ ...base, draft: true, headRepo: base.repository, headRef: "train/weekly" }).authorized, false);
   assert.equal(classifyPullRequest({ ...base, headRepo: "fork/repo", headRef: "train/weekly" }).authorized, false);
-  assert.equal(classifyPullRequest({ ...base, headRepo: "fork/repo", headRef: "feature", labels: ["CI-READY"] }).authorized, true);
+  for (const action of EVENTS) {
+    const fork = classifyPullRequest({ ...base, action, headRepo: "fork/repo", headRef: "feature", labels: ["CI-READY"], eventLabel: "ci-ready" });
+    assert.equal(fork.billable, false); assert.equal(fork.authorized, false);
+  }
+  assert.equal(classifyPullRequest({ ...base, headRepo: base.repository, headRef: "feature", labels: ["CI-READY"] }).authorized, true);
   assert.equal(classifyPullRequest({ ...base, headRepo: base.repository, headRef: "Chore/Sync-Gemini-Web", labels: ["ci-ready"] }).authorized, false);
   for (const action of EVENTS) {
     const state = classifyPullRequest({ ...base, action, headRepo: base.repository, headRef: "feature", labels: ["ci-ready"], eventLabel: "ci-ready" });
@@ -36,6 +40,7 @@ test("concurrency revokes canonically and isolates all label noise", () => {
     assert.match(concurrencyGroup({ ...base, action, eventLabel: "CI-READY" }), /-clearance$/);
     assert.match(concurrencyGroup({ ...base, action, eventLabel: "other" }), /-123$/);
     assert.match(concurrencyGroup({ ...base, action, headRef: "train/weekly", eventLabel: "ci-ready" }), /-123$/);
+    assert.match(concurrencyGroup({ ...base, action, headRepo: "fork/repo", eventLabel: "ci-ready" }), /-123$/);
   }
 });
 

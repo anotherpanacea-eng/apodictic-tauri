@@ -140,7 +140,8 @@ export function validateLandingAuthorization({ authorization, headRepo, headRef,
     return "train";
   }
   if (authorization !== "standalone"
-    || (same(headRepo, REPOSITORY) && same(headRef, SYNC_REF))
+    || !same(headRepo, REPOSITORY)
+    || same(headRef, SYNC_REF)
     || !names.some((label) => same(label, "ci-ready"))
     || inventoryPath) throw new PolicyError("standalone authorization is stale");
   return "standalone";

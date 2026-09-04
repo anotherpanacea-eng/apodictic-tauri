@@ -38,14 +38,17 @@ The job is authorized only when the PR is non-draft and either:
 
 1. the head repository is this repository, the branch is a bounded canonical `train/<name>`, and
    the activity is one of the four arming activities; or
-2. the PR is not a train, is not fixed branch `chore/sync-gemini-web`, currently has `ci-ready`,
-   and either receives an arming activity or that exact label is added.
+2. the head repository is this repository, the PR is not a train, is not fixed branch
+   `chore/sync-gemini-web`, currently has `ci-ready`, and either receives an arming activity or
+   that exact label is added.
 
-Forks cannot be trains but may use the explicit standalone exception. Case comparisons match
-GitHub expression semantics. Every other event creates at most a skipped zero-step record with no
-runner. Canonical concurrency cancels obsolete clearance on synchronize, draft conversion, close,
-or exact standalone-label removal, while unrelated label noise uses a run-unique group and cannot
-cancel valid work. Run names expose only bounded activity identity used by the live verifier.
+Forks cannot authorize hosted CI at all: every fork event remains a skipped zero-step record, so
+untrusted code never receives the private payload credential and never burns a doomed macOS job.
+Case comparisons match GitHub expression semantics. Every other event creates at most a skipped
+zero-step record with no runner. Canonical concurrency cancels obsolete clearance on synchronize,
+draft conversion, close, or exact same-repository standalone-label removal, while unrelated label
+noise uses a run-unique group and cannot cancel valid work. Run names expose only bounded activity
+identity used by the live verifier.
 
 There is no push trigger. A tested landing therefore produces no second CI run.
 
