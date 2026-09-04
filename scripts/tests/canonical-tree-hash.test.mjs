@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { hashTree, sha256File } from "../lib/canonical-tree-hash.mjs";
+import { hashTree, legacyHashTree, sha256File } from "../lib/canonical-tree-hash.mjs";
 
 function temporaryDirectory(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "canonical-tree-hash-test-"));
@@ -13,7 +13,7 @@ function temporaryDirectory(t) {
   return directory;
 }
 
-test("canonical tree hash uses sorted POSIX paths and NUL-delimited bytes", (t) => {
+test("canonical v2 tree hash uses sorted length-prefixed paths and bytes", (t) => {
   const directory = temporaryDirectory(t);
   fs.mkdirSync(path.join(directory, "nested"));
   fs.mkdirSync(path.join(directory, "prefix"));
@@ -22,22 +22,22 @@ test("canonical tree hash uses sorted POSIX paths and NUL-delimited bytes", (t) 
   fs.writeFileSync(path.join(directory, "prefix", "inside.txt"), "inside");
   fs.writeFileSync(path.join(directory, "prefix.file"), "outside");
 
-  const expected = createHash("sha256")
-    .update("nested/a.txt\0")
-    .update("first")
-    .update("\0")
-    .update("prefix.file\0")
-    .update("outside")
-    .update("\0")
-    .update("prefix/inside.txt\0")
-    .update("inside")
-    .update("\0")
-    .update("z.txt\0")
-    .update("last")
-    .update("\0")
-    .digest("hex");
+  const length = (value) => { const bytes = Buffer.alloc(8); bytes.writeBigUInt64BE(BigInt(value)); return bytes; };
+  const entries = [["nested/a.txt", "first"], ["prefix.file", "outside"], ["prefix/inside.txt", "inside"], ["z.txt", "last"]];
+  const digest = createHash("sha256").update("apodictic-tree-sha256-v2\0").update(length(entries.length));
+  for (const [name, value] of entries) digest.update(length(Buffer.byteLength(name))).update(name).update(length(Buffer.byteLength(value))).update(value);
+  const expected = digest.digest("hex");
   assert.equal(hashTree(directory), expected);
   assert.equal(sha256File(path.join(directory, "z.txt")), createHash("sha256").update("last").digest("hex"));
+});
+
+test("v2 framing separates the legacy NUL boundary collision", (t) => {
+  const root = temporaryDirectory(t); const left = path.join(root, "left"); const right = path.join(root, "right");
+  fs.mkdirSync(left); fs.mkdirSync(right);
+  fs.writeFileSync(path.join(left, "a"), "x"); fs.writeFileSync(path.join(left, "b"), "y");
+  fs.writeFileSync(path.join(right, "a"), Buffer.from("x\0b\0y"));
+  assert.equal(legacyHashTree(left), legacyHashTree(right));
+  assert.notEqual(hashTree(left), hashTree(right));
 });
 
 test("canonical tree hash retains null for a missing root", (t) => {

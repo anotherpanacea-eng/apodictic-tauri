@@ -60,9 +60,13 @@ publication operation.
      `Authority=` line, reports an unsigned/ad-hoc/linker-signed signature, and reports
      TeamIdentifier either absent or exactly `not set`.
 8. The canonical tree-hash implementation is extracted once from `sync-gemini-web.mjs` into a
-   shared internal module and used by both the existing drift gate and the bundle verifier. Its
-   existing contract remains unchanged: SHA-256 over sorted POSIX-relative regular-file paths and
-   bytes as `path + NUL + bytes + NUL`. Directories containing symlinks or non-regular files fail.
+   shared internal module and used by both the drift gate and bundle verifier. The lock upgrades to
+   the domain-separated `apodictic-tree-sha256-v2` contract: SHA-256 over the entry count followed
+   by sorted, byte-length-prefixed UTF-8 paths and byte-length-prefixed file contents. This framing
+   is unambiguous even when file bytes contain NULs. A legacy manifest from an already-published
+   payload may be checked with the old delimiter encoding only during authenticated sync; the
+   committed lock and every exact-byte drift/probe claim require v2. Directories containing
+   symlinks or non-regular files fail.
 9. The receipt is a small fixed JSON object with `schema_version: 1` and exactly these fields:
     `probe_name`, `source_commit`, `payload_tag`, `payload_commit`, `host_os_version`,
     `target_triple`, `bundle_version`, `minimum_system_version`, `distribution_ready`,
@@ -72,9 +76,10 @@ publication operation.
 10. No workflow, cache, upload, release, copy-to-shared-path, or publication command is added. The
     bundle and receipt remain under ignored target output; the script prints that exact fact.
 11. Verification includes the existing payload/Rust/clippy/build/sidecar gates, one successful clean
-    host probe, and copied-bundle negative probes showing that a changed dist byte, wrong minimum OS,
-    wrong expected target, and missing sidecar each fail without producing a receipt. Direct execution
-    of the internal verifier also fails without producing a receipt.
+    host probe, and checked-in macOS copied-bundle tests showing that a changed dist byte, wrong minimum
+    OS, wrong expected target, and missing sidecar each fail without producing a receipt. It also
+    includes the legacy two-files-versus-one-file NUL collision and hidden tracked changes under both
+    assume-unchanged and skip-worktree. Direct execution of the internal verifier fails without a receipt.
 12. Documentation calls the result a **packaging probe**, never an installer, release candidate,
     beta, distributable, signed build, or download, and states that no artifact was published or
     distributed.

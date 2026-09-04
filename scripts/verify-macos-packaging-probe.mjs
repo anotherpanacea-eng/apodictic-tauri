@@ -93,6 +93,7 @@ function validateLock(lock, targetTriple) {
   for (const field of ["tag", "commit", "dist_sha256", "plugin_sha256"]) {
     if (typeof lock[field] !== "string" || !lock[field]) fail(`gemini-web.lock has invalid ${field}`);
   }
+  if (lock.tree_hash_schema !== "apodictic-tree-sha256-v2") fail("gemini-web.lock lacks the collision-unambiguous tree hash schema");
   if (lock.status !== "pinned") fail("gemini-web.lock is not pinned");
   if (!/^[0-9a-f]{40}$/.test(lock.commit)) fail("gemini-web.lock contains a malformed commit");
   if (!hashPattern.test(lock.dist_sha256) || !hashPattern.test(lock.plugin_sha256)) {

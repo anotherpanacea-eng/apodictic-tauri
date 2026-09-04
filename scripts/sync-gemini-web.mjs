@@ -37,7 +37,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { hashTree, sha256File } from "./lib/canonical-tree-hash.mjs";
+import { hashTree, legacyHashTree, sha256File } from "./lib/canonical-tree-hash.mjs";
 
 const REPO = "anotherpanacea-eng/APODICTIC-Gemini";
 const API = "https://api.github.com";
@@ -92,6 +92,9 @@ async function gh(urlPath) {
  */
 function verifyVendoredAgainstLock(lock) {
   const problems = [];
+  if (lock.tree_hash_schema !== "apodictic-tree-sha256-v2") {
+    problems.push("lock lacks the collision-unambiguous tree hash schema — re-run `npm run sync:web`.");
+  }
   const distDir = path.join(VENDOR, "dist");
   const binDir = path.join(VENDOR, "binaries");
   const pluginDir = path.join(VENDOR, "apodictic-plugin");
@@ -187,7 +190,13 @@ function computePayloadHashes(dir) {
       if (f.startsWith("app-sidecar-")) sidecars.push({ target: f.replace(/^app-sidecar-/, ""), sha256: sha256File(path.join(binDir, f)) });
     }
   }
-  return { dist_sha256: hashTree(path.join(dir, "dist")), plugin_sha256: hashTree(path.join(dir, "apodictic-plugin")), sidecars };
+  return {
+    dist_sha256: hashTree(path.join(dir, "dist")),
+    plugin_sha256: hashTree(path.join(dir, "apodictic-plugin")),
+    legacy_dist_sha256: legacyHashTree(path.join(dir, "dist")),
+    legacy_plugin_sha256: legacyHashTree(path.join(dir, "apodictic-plugin")),
+    sidecars,
+  };
 }
 
 /** Compare hashes recomputed from real payload BYTES to the committed lock. */
@@ -308,10 +317,13 @@ async function doSync() {
   const computed = computePayloadHashes(VENDOR);
   const got = new Map(computed.sidecars.map((s) => [s.target, s.sha256]));
   const transit = [];
-  if (manifest.dist_sha256 && manifest.dist_sha256 !== computed.dist_sha256)
-    transit.push(`dist: manifest ${manifest.dist_sha256} != downloaded ${computed.dist_sha256}`);
-  if (manifest.plugin_sha256 && manifest.plugin_sha256 !== computed.plugin_sha256)
-    transit.push(`plugin: manifest ${manifest.plugin_sha256} != downloaded ${computed.plugin_sha256}`);
+  const manifestV2 = manifest.tree_hash_schema === "apodictic-tree-sha256-v2";
+  const downloadedDist = manifestV2 ? computed.dist_sha256 : computed.legacy_dist_sha256;
+  const downloadedPlugin = manifestV2 ? computed.plugin_sha256 : computed.legacy_plugin_sha256;
+  if (manifest.dist_sha256 && manifest.dist_sha256 !== downloadedDist)
+    transit.push(`dist: manifest ${manifest.dist_sha256} != downloaded ${downloadedDist}`);
+  if (manifest.plugin_sha256 && manifest.plugin_sha256 !== downloadedPlugin)
+    transit.push(`plugin: manifest ${manifest.plugin_sha256} != downloaded ${downloadedPlugin}`);
   for (const { target, sha256: claimed } of manifest.sidecars || []) {
     if (!got.has(target)) transit.push(`sidecar ${target}: missing from payload`);
     else if (claimed && claimed !== got.get(target))
@@ -339,6 +351,7 @@ async function doSync() {
     web_version: manifest.web_version,
     plugin_version: manifest.plugin_version, // inherited from Gemini's apodictic-plugin.lock; recorded, not re-pinned
     payload_asset: payloadAsset.name,
+    tree_hash_schema: "apodictic-tree-sha256-v2",
     dist_sha256: computed.dist_sha256,
     plugin_sha256: computed.plugin_sha256,
     sidecars: computed.sidecars,

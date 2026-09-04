@@ -48,7 +48,7 @@ export function childEnvironment(targetDirectory, environment = process.env) {
 
 function run(commandPath, args, env, options = {}) {
   const result = spawnSync(commandPath, args, {
-    cwd: repoRoot,
+    cwd: options.cwd ?? repoRoot,
     env,
     encoding: "utf8",
     maxBuffer: 16 * 1024 * 1024,
@@ -60,12 +60,22 @@ function run(commandPath, args, env, options = {}) {
   return options.capture ? (result.stdout || "") : "";
 }
 
-function cleanTrackedTree(env) {
-  const trackedChanges = run("/usr/bin/git", ["status", "--porcelain=v1", "--untracked-files=no"], env, {
-    capture: true,
-    label: "tracked worktree check",
-  });
-  if (trackedChanges.trim()) fail("tracked worktree is not clean; commit or restore tracked changes before probing");
+export function verifyTrackedSourceClean(directory = repoRoot, env = process.env) {
+  const git = process.platform === "darwin" ? "/usr/bin/git" : "git";
+  const options = { capture: true, cwd: directory, label: "tracked worktree check" };
+  const flags = run(git, ["ls-files", "-v", "-z"], env, options).split("\0").filter(Boolean);
+  for (const entry of flags) {
+    if (!entry.startsWith("H ")) fail(`tracked source has a hidden or nonstandard index flag: ${entry.slice(0, 1)}`);
+  }
+  run(git, ["diff-index", "--cached", "--quiet", "HEAD", "--"], env, { cwd: directory, label: "HEAD/index check" });
+  const staged = run(git, ["ls-files", "--stage", "-z"], env, options).split("\0").filter(Boolean);
+  for (const entry of staged) {
+    const separator = entry.indexOf("\t");
+    const metadata = entry.slice(0, separator).split(" "); const file = entry.slice(separator + 1);
+    if (separator < 0 || metadata.length !== 3 || metadata[2] !== "0") fail("tracked source index is malformed or unmerged");
+    const actual = run(git, ["hash-object", `--path=${file}`, "--", file], env, options).trim();
+    if (actual !== metadata[1]) fail(`tracked source bytes differ from HEAD/index: ${file}`);
+  }
 }
 
 function currentHead(env) {
@@ -168,7 +178,7 @@ function main() {
   const host = expectedHostTarget();
   const { resolvedRoot, resolvedRun } = prepareRunDirectory();
   const env = childEnvironment(resolvedRun);
-  cleanTrackedTree(env);
+  verifyTrackedSourceClean(repoRoot, env);
   const sourceCommit = currentHead(env);
 
   requireStagedPayload(host.targetTriple);
@@ -210,7 +220,7 @@ function main() {
     env,
   );
   if (currentHead(env) !== sourceCommit) fail("source commit changed while the packaging probe was running");
-  cleanTrackedTree(env);
+  verifyTrackedSourceClean(repoRoot, env);
   writeReceipt(receiptPath, receipt);
 
   console.log("✓ UNSIGNED-NON-DISTRIBUTABLE-PACKAGING-PROBE complete");
