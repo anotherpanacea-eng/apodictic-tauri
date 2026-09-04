@@ -219,15 +219,6 @@ async function doCheck() {
     console.error("✗ gemini-web.lock missing.");
     process.exit(1);
   }
-  // Bootstrap state: the producer pipeline (Increment 2) hasn't shipped a payload yet.
-  // Nothing to verify; keep CI green and report the state. Flips to real gating once status=pinned.
-  if (lock.status === "bootstrap") {
-    console.log(
-      "• gemini-web.lock is in BOOTSTRAP state — APODICTIC-Gemini has not yet published a desktop\n" +
-        "  payload (migration Increment 2). Drift gate is a no-op until the lock is pinned. (OK)"
-    );
-    process.exit(0);
-  }
   try { requireV2TreeHashLock(lock); } catch (error) { console.error(`✗ ${error.message}.`); process.exit(1); }
 
   // CONTENT verification. The vendored payload is gitignored / pulled on demand (large binaries),

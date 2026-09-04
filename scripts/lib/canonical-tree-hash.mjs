@@ -57,6 +57,7 @@ export function manifestTreeHashSchema(value, { allowLegacy = false } = {}) {
 }
 
 export function requireV2TreeHashLock(lock) {
+  if (lock?.status !== "pinned") throw new Error("lock is not pinned");
   if (lock?.tree_hash_schema !== "apodictic-tree-sha256-v2") {
     throw new Error("lock lacks the collision-unambiguous tree hash schema");
   }

@@ -133,7 +133,8 @@ GitHub _release assets_** (`/releases/.../assets`), not a tarball. Do **not** li
   - `scripts/sync-gemini-web.mjs` — resolves the latest (or named) Gemini **release**, downloads the
     payload asset into `vendor/gemini-web/`, verifies every hash against `payload-manifest.json`, records
     `gemini-web.lock`; `--check` exits non-zero if the lock is behind the latest release **or** any vendored
-    hash ≠ the lock (the **drift gate**). Compares the resolved **commit**, not just the tag (preserves
+    hash ≠ the lock (the **drift gate**). Since the producer has shipped, every non-`pinned` lock
+    status fails closed; the historical bootstrap no-op is retired. Compares the resolved **commit**, not just the tag (preserves
     `sync-plugin.mjs:154-159`'s re-pointed-tag protection).
   - `.github/workflows/sync-gemini-web.yml` — scheduled weekly + `workflow_dispatch`; runs the sync and
     opens a bump PR. **Auth (S5):** Gemini is **private**, so the default `secrets.GITHUB_TOKEN` (current-repo
