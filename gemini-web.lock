@@ -5,8 +5,9 @@
   "web_version": "0.2.1",
   "plugin_version": "2.10.0",
   "payload_asset": "desktop-payload-0.2.1.tar.gz",
-  "dist_sha256": "c96e4c5460044926522facef160faaf7b60267d2753ba51b7f148aa2a94d80a9",
-  "plugin_sha256": "d424e38f9b8dc4c9f89448a104a89c1eb11d595bde7660835e0c1a0c458f880e",
+  "tree_hash_schema": "apodictic-tree-sha256-v2",
+  "dist_sha256": "95503b1be218437dfb3e7a03a6ee4fd1fba856353229fd54e0d779948f1be8c6",
+  "plugin_sha256": "74a1c007130d74c5eca5689d18beb87d0d5953c0d1b28116edc34592fe4cefb6",
   "sidecars": [
     {
       "target": "aarch64-apple-darwin",
