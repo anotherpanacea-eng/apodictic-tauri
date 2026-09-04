@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { hashTree, legacyHashTree, sha256File } from "../lib/canonical-tree-hash.mjs";
+import { hashTree, legacyHashTree, manifestTreeHashSchema, sha256File } from "../lib/canonical-tree-hash.mjs";
 
 function temporaryDirectory(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "canonical-tree-hash-test-"));
@@ -38,6 +38,12 @@ test("v2 framing separates the legacy NUL boundary collision", (t) => {
   fs.writeFileSync(path.join(right, "a"), Buffer.from("x\0b\0y"));
   assert.equal(legacyHashTree(left), legacyHashTree(right));
   assert.notEqual(hashTree(left), hashTree(right));
+});
+
+test("manifest schema accepts only absent legacy or exact v2", () => {
+  assert.equal(manifestTreeHashSchema(undefined), "legacy-nul-delimited-v1");
+  assert.equal(manifestTreeHashSchema("apodictic-tree-sha256-v2"), "apodictic-tree-sha256-v2");
+  for (const value of [null, "", "future-v3", 2]) assert.throws(() => manifestTreeHashSchema(value), /unsupported/);
 });
 
 test("canonical tree hash retains null for a missing root", (t) => {

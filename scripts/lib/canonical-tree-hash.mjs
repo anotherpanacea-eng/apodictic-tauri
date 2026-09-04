@@ -50,6 +50,12 @@ function treeFiles(directory) {
   return files;
 }
 
+export function manifestTreeHashSchema(value) {
+  if (value === undefined) return "legacy-nul-delimited-v1";
+  if (value === "apodictic-tree-sha256-v2") return value;
+  throw new Error(`unsupported payload manifest tree hash schema: ${String(value)}`);
+}
+
 export function legacyHashTree(directory) {
   const files = treeFiles(directory);
   if (files === null) return null;

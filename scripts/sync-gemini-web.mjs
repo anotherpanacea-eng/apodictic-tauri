@@ -37,7 +37,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { hashTree, legacyHashTree, sha256File } from "./lib/canonical-tree-hash.mjs";
+import { hashTree, legacyHashTree, manifestTreeHashSchema, sha256File } from "./lib/canonical-tree-hash.mjs";
 
 const REPO = "anotherpanacea-eng/APODICTIC-Gemini";
 const API = "https://api.github.com";
@@ -317,7 +317,7 @@ async function doSync() {
   const computed = computePayloadHashes(VENDOR);
   const got = new Map(computed.sidecars.map((s) => [s.target, s.sha256]));
   const transit = [];
-  const manifestV2 = manifest.tree_hash_schema === "apodictic-tree-sha256-v2";
+  const manifestV2 = manifestTreeHashSchema(manifest.tree_hash_schema) === "apodictic-tree-sha256-v2";
   const downloadedDist = manifestV2 ? computed.dist_sha256 : computed.legacy_dist_sha256;
   const downloadedPlugin = manifestV2 ? computed.plugin_sha256 : computed.legacy_plugin_sha256;
   if (manifest.dist_sha256 && manifest.dist_sha256 !== downloadedDist)
