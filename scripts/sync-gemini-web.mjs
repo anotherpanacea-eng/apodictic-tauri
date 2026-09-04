@@ -37,12 +37,13 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { hashTree, legacyHashTree, manifestTreeHashSchema, sha256File } from "./lib/canonical-tree-hash.mjs";
+import { hashTree, legacyHashTree, manifestTreeHashSchema, requireV2TreeHashLock, sha256File } from "./lib/canonical-tree-hash.mjs";
 
 const REPO = "anotherpanacea-eng/APODICTIC-Gemini";
 const API = "https://api.github.com";
 const PAYLOAD_ASSET_PREFIX = "desktop-payload-";
 const MANIFEST_ASSET = "payload-manifest.json";
+const LEGACY_RELEASE = Object.freeze({ tag: "v0.2.1", commit: "268341b69020a6c7973d5584199c580ecc19c663" });
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const VENDOR = path.join(repoRoot, "vendor", "gemini-web");
@@ -92,9 +93,7 @@ async function gh(urlPath) {
  */
 function verifyVendoredAgainstLock(lock) {
   const problems = [];
-  if (lock.tree_hash_schema !== "apodictic-tree-sha256-v2") {
-    problems.push("lock lacks the collision-unambiguous tree hash schema — re-run `npm run sync:web`.");
-  }
+  try { requireV2TreeHashLock(lock); } catch { problems.push("lock lacks the collision-unambiguous tree hash schema — re-run `npm run sync:web`."); }
   const distDir = path.join(VENDOR, "dist");
   const binDir = path.join(VENDOR, "binaries");
   const pluginDir = path.join(VENDOR, "apodictic-plugin");
@@ -229,6 +228,7 @@ async function doCheck() {
     );
     process.exit(0);
   }
+  try { requireV2TreeHashLock(lock); } catch (error) { console.error(`✗ ${error.message}.`); process.exit(1); }
 
   // CONTENT verification. The vendored payload is gitignored / pulled on demand (large binaries),
   // so a fresh checkout (PR-time CI) has it ABSENT. We must still verify — NOT silently pass (Codex
@@ -317,7 +317,9 @@ async function doSync() {
   const computed = computePayloadHashes(VENDOR);
   const got = new Map(computed.sidecars.map((s) => [s.target, s.sha256]));
   const transit = [];
-  const manifestV2 = manifestTreeHashSchema(manifest.tree_hash_schema) === "apodictic-tree-sha256-v2";
+  const tagCommit = await resolveCommit(rel.tag_name);
+  const allowLegacy = rel.tag_name === LEGACY_RELEASE.tag && tagCommit === LEGACY_RELEASE.commit;
+  const manifestV2 = manifestTreeHashSchema(manifest.tree_hash_schema, { allowLegacy }) === "apodictic-tree-sha256-v2";
   const downloadedDist = manifestV2 ? computed.dist_sha256 : computed.legacy_dist_sha256;
   const downloadedPlugin = manifestV2 ? computed.plugin_sha256 : computed.legacy_plugin_sha256;
   if (manifest.dist_sha256 && manifest.dist_sha256 !== downloadedDist)
@@ -332,7 +334,6 @@ async function doSync() {
   // Bind the payload to the release tag's commit (Codex P1, 2026-06-19): the producer stamps
   // manifest.commit with the commit it built from; require it to equal the tag's resolved commit,
   // or the payload wasn't built from this tag (a release asset can be uploaded from any build).
-  const tagCommit = await resolveCommit(rel.tag_name);
   if (!manifest.commit) {
     transit.push("payload-manifest.json has no `commit` — cannot bind the payload to the tag.");
   } else if (tagCommit && manifest.commit !== tagCommit) {

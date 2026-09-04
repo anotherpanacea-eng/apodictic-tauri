@@ -68,6 +68,7 @@ export function verifyTrackedSourceClean(directory = repoRoot, env = process.env
     if (!entry.startsWith("H ")) fail(`tracked source has a hidden or nonstandard index flag: ${entry.slice(0, 1)}`);
   }
   run(git, ["diff-index", "--cached", "--quiet", "HEAD", "--"], env, { cwd: directory, label: "HEAD/index check" });
+  run(git, ["diff-files", "--quiet", "--"], env, { cwd: directory, label: "index/worktree mode and type check" });
   const staged = run(git, ["ls-files", "--stage", "-z"], env, options).split("\0").filter(Boolean);
   for (const entry of staged) {
     const separator = entry.indexOf("\t");

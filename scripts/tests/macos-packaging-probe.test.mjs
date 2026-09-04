@@ -84,6 +84,20 @@ for (const flag of ["--assume-unchanged", "--skip-worktree"]) {
   });
 }
 
+for (const mutation of ["chmod", "same-byte-symlink"]) {
+  test(`tracked source ${mutation} type/mode drift cannot bind a receipt`, { skip: process.platform === "win32" ? "requires POSIX file modes and symlinks" : false }, (t) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "packaging-mode-proof-"));
+    t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+    git(directory, ["init", "-b", "main"]); git(directory, ["config", "user.name", "Test"]); git(directory, ["config", "user.email", "test@example.invalid"]); git(directory, ["config", "core.filemode", "true"]);
+    const source = path.join(directory, "source.txt"); const receipt = path.join(directory, "receipt.json");
+    fs.writeFileSync(source, "reviewed\n"); git(directory, ["add", "source.txt"]); git(directory, ["commit", "-m", "reviewed"]);
+    if (mutation === "chmod") fs.chmodSync(source, 0o755);
+    else { const outside = path.join(directory, "outside.txt"); fs.writeFileSync(outside, "reviewed\n"); fs.rmSync(source); fs.symlinkSync("outside.txt", source); }
+    assert.throws(() => verifyTrackedSourceClean(directory), /mode and type check/);
+    assert.equal(fs.existsSync(receipt), false);
+  });
+}
+
 function macBundleFixture(t) {
   const host = expectedHostTarget();
   const probeRoot = path.join(repoRoot, "src-tauri", "target", "packaging-probes");

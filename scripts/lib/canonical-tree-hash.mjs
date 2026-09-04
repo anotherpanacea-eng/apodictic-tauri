@@ -50,10 +50,17 @@ function treeFiles(directory) {
   return files;
 }
 
-export function manifestTreeHashSchema(value) {
-  if (value === undefined) return "legacy-nul-delimited-v1";
+export function manifestTreeHashSchema(value, { allowLegacy = false } = {}) {
+  if (value === undefined && allowLegacy === true) return "legacy-nul-delimited-v1";
   if (value === "apodictic-tree-sha256-v2") return value;
   throw new Error(`unsupported payload manifest tree hash schema: ${String(value)}`);
+}
+
+export function requireV2TreeHashLock(lock) {
+  if (lock?.tree_hash_schema !== "apodictic-tree-sha256-v2") {
+    throw new Error("lock lacks the collision-unambiguous tree hash schema");
+  }
+  return lock;
 }
 
 export function legacyHashTree(directory) {

@@ -63,8 +63,9 @@ publication operation.
    shared internal module and used by both the drift gate and bundle verifier. The lock upgrades to
    the domain-separated `apodictic-tree-sha256-v2` contract: SHA-256 over the entry count followed
    by sorted, byte-length-prefixed UTF-8 paths and byte-length-prefixed file contents. This framing
-   is unambiguous even when file bytes contain NULs. A legacy manifest from an already-published
-   payload may be checked with the old delimiter encoding only during authenticated sync; the
+   is unambiguous even when file bytes contain NULs. Only the schema-less Gemini `v0.2.1` manifest
+   at commit `268341b69020a6c7973d5584199c580ecc19c663` may be checked with the old delimiter encoding
+   during authenticated migration sync; every future absent or unknown schema refuses, and the
    committed lock and every exact-byte drift/probe claim require v2. Directories containing
    symlinks or non-regular files fail.
 9. The receipt is a small fixed JSON object with `schema_version: 1` and exactly these fields:

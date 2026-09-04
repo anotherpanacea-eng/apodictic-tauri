@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { hashTree, legacyHashTree, manifestTreeHashSchema, sha256File } from "../lib/canonical-tree-hash.mjs";
+import { hashTree, legacyHashTree, manifestTreeHashSchema, requireV2TreeHashLock, sha256File } from "../lib/canonical-tree-hash.mjs";
 
 function temporaryDirectory(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "canonical-tree-hash-test-"));
@@ -41,9 +41,11 @@ test("v2 framing separates the legacy NUL boundary collision", (t) => {
 });
 
 test("manifest schema accepts only absent legacy or exact v2", () => {
-  assert.equal(manifestTreeHashSchema(undefined), "legacy-nul-delimited-v1");
+  assert.equal(manifestTreeHashSchema(undefined, { allowLegacy: true }), "legacy-nul-delimited-v1");
   assert.equal(manifestTreeHashSchema("apodictic-tree-sha256-v2"), "apodictic-tree-sha256-v2");
-  for (const value of [null, "", "future-v3", 2]) assert.throws(() => manifestTreeHashSchema(value), /unsupported/);
+  for (const value of [undefined, null, "", "future-v3", 2]) assert.throws(() => manifestTreeHashSchema(value), /unsupported/);
+  assert.equal(requireV2TreeHashLock({ tree_hash_schema: "apodictic-tree-sha256-v2" }).tree_hash_schema, "apodictic-tree-sha256-v2");
+  for (const lock of [{}, { tree_hash_schema: null }, { tree_hash_schema: "future-v3" }]) assert.throws(() => requireV2TreeHashLock(lock), /lacks/);
 });
 
 test("canonical tree hash retains null for a missing root", (t) => {

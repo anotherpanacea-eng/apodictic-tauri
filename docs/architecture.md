@@ -111,15 +111,19 @@ GitHub _release assets_** (`/releases/.../assets`), not a tarball. Do **not** li
 - **Producer (`APODICTIC-Gemini`):** a tagged release builds and uploads a **desktop-payload archive** as a
   release asset (e.g. `desktop-payload-<version>.tar.zst`) containing: `dist/` (built frontend) +
   per-target `app-sidecar` binaries + `apodictic-plugin/`, plus `payload-manifest.json`
-  (`{ web_version, plugin_version, per-target sidecar entries with sha256, dist_sha256, plugin_sha256 }`).
+  (`{ web_version, plugin_version, tree_hash_schema, per-target sidecar entries with sha256,
+  dist_sha256, plugin_sha256 }`).
   **This producer pipeline does not exist yet — see §5 Increment 2.**
 - **Consumer (`apodictic-tauri`):**
   - `gemini-web.lock` — `{ repo, tag, commit, web_version, plugin_version, payload_asset,
-    dist_sha256, plugin_sha256, sidecars: [{ target, sha256 }], status, source }`. **Per-component
+    tree_hash_schema, dist_sha256, plugin_sha256, sidecars: [{ target, sha256 }], status, source }`. **Per-component
     hashes, no separate archive `payload_sha256`** (reconciled w/ the implementation, S4):
-    `dist_sha256`/`plugin_sha256` are **canonical tree hashes** — files in sorted POSIX-relative-path
-    order, each contributing `path\0<bytes>\0` to a single sha256 (`hashTree` in
-    `scripts/sync-gemini-web.mjs`; the producer's `payload-manifest.json` MUST match). Per-target
+    `dist_sha256`/`plugin_sha256` are **canonical v2 tree hashes** — a domain tag and entry count,
+    followed by sorted byte-length-prefixed UTF-8 paths and byte-length-prefixed contents. The
+    producer's `payload-manifest.json` MUST declare `apodictic-tree-sha256-v2` and match. The sole
+    compatibility exception is the schema-less, already-published Gemini `v0.2.1` payload at commit
+    `268341b69020a6c7973d5584199c580ecc19c663`; its legacy manifest is checked only during authenticated
+    migration sync and never supplies the committed exact-byte proof. Per-target
     sidecar hashes (S2) so a single missing/corrupt arch is detectable. `--check` **recomputes** these
     from the bytes on disk (it does not trust the manifest's self-reported values — S3). `commit` is
     the **resolved tag SHA** (not `target_commitish`, which is often a branch name).
