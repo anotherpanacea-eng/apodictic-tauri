@@ -1,16 +1,8 @@
 name: Sync Gemini desktop payload
 
-# Keeps the vendored APODICTIC-Gemini desktop payload current with the latest *released* payload,
-# and opens a bump PR. Pure pull: Gemini publishes the desktop-payload release asset; this repo
-# vendors it (sync) behind gemini-web.lock + the drift gate.
-#
-# AUTH: APODICTIC-Gemini is PRIVATE. The default GITHUB_TOKEN is current-repo-scoped and cannot read
-# a sibling private repo's release assets. Provide a PAT / GitHub-App token as the GEMINI_SYNC_TOKEN
-# repo secret (cross-repo read on anotherpanacea-eng/APODICTIC-Gemini).
-
 on:
   schedule:
-    - cron: "0 15 * * 1" # Mondays 15:00 UTC (an hour after the Gemini->apodictic sync)
+    - cron: "0 15 * * 1"
   workflow_dispatch:
     inputs:
       ref:
@@ -27,12 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-
-      - name: Vendor the latest Gemini desktop payload
+          node-version: 22
+      - name: Vendor the selected Gemini desktop payload
         env:
           GEMINI_SYNC_TOKEN: ${{ secrets.GEMINI_SYNC_TOKEN }}
           REF: ${{ github.event.inputs.ref || 'latest' }}
@@ -42,15 +32,17 @@ jobs:
           else
             node scripts/sync-gemini-web.mjs "$REF"
           fi
-
       - name: Read pinned release
         id: lock
         run: |
           echo "tag=$(node -p "require('./gemini-web.lock').tag")" >> "$GITHUB_OUTPUT"
           echo "web=$(node -p "require('./gemini-web.lock').web_version")" >> "$GITHUB_OUTPUT"
-
-      - name: Open bump PR
-        uses: peter-evans/create-pull-request@v6
+      - name: Ensure sync PR is draft and unarmed before update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ensure-sync-pr-draft.mjs --repository "$GITHUB_REPOSITORY"
+      - name: Open or update draft bump PR
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
         with:
           branch: chore/sync-gemini-web
           commit-message: "Sync Gemini desktop payload to ${{ steps.lock.outputs.tag }} (web ${{ steps.lock.outputs.web }})"
@@ -60,5 +52,11 @@ jobs:
 
             - **Release:** ${{ steps.lock.outputs.tag }}
             - **Web version:** ${{ steps.lock.outputs.web }}
-            - Updated `gemini-web.lock` (per-target sidecar hashes). The vendored payload bytes are
-              gitignored; CI re-pulls + verifies via the drift gate.
+            - Updated `gemini-web.lock`; vendored payload bytes remain gitignored and are re-pulled by CI.
+          delete-branch: true
+          draft: always-true
+          add-paths: gemini-web.lock
+      - name: Ensure sync PR is draft and unarmed after update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ensure-sync-pr-draft.mjs --repository "$GITHUB_REPOSITORY"

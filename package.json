@@ -9,9 +9,12 @@
     "sync:web": "node scripts/sync-gemini-web.mjs",
     "sync:web:check": "node scripts/sync-gemini-web.mjs --check",
     "desktop:dev": "tauri dev",
-    "desktop:build": "npm run sync:web && tauri build"
+    "desktop:build": "npm run sync:web && tauri build",
+    "packaging:probe": "node scripts/run-macos-packaging-probe.mjs",
+    "test:packaging-probe": "node --test scripts/tests/*.test.mjs"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.10.1"
+    "@tauri-apps/cli": "^2.10.1",
+    "yaml": "^2.8.1"
   }
 }
