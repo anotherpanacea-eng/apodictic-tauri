@@ -125,7 +125,8 @@ normal merge policy.
   (offline byte-integrity). **Only when a token is present** (not PR-time CI) does it also check the
   lock is behind the latest release — comparing the resolved **commit SHA**, not just the tag, to
   catch a re-pointed tag. "Behind latest" freshness is otherwise the weekly sync workflow's job (it
-  opens the bump PR). While `gemini-web.lock` is in `bootstrap` state the gate is a no-op (exit 0).
+  opens the bump PR). The producer has shipped; the lock must be `pinned` with the v2 tree-hash schema.
+  Bootstrap or any other status fails closed.
 - Run `sync:web` before `desktop:build` — `frontendDist`/`externalBin`/`resources` resolve to
   `vendor/gemini-web/`, and there is no fallback build-from-source path.
 

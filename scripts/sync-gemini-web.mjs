@@ -161,7 +161,7 @@ async function downloadAndExtractPayload(rel, destDir) {
   if (!payloadAsset || !manifestAsset) {
     throw new Error(
       `release ${rel.tag_name} has no desktop payload (need '${PAYLOAD_ASSET_PREFIX}*' + '${MANIFEST_ASSET}') — ` +
-        `the producer pipeline (APODICTIC-Gemini, migration Increment 2) has not shipped one. See docs/architecture.md §5.`
+        `the selected APODICTIC-Gemini release is malformed or predates the shipped desktop-payload contract.`
     );
   }
   fs.mkdirSync(destDir, { recursive: true });

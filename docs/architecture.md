@@ -113,7 +113,7 @@ GitHub _release assets_** (`/releases/.../assets`), not a tarball. Do **not** li
   per-target `app-sidecar` binaries + `apodictic-plugin/`, plus `payload-manifest.json`
   (`{ web_version, plugin_version, tree_hash_schema, per-target sidecar entries with sha256,
   dist_sha256, plugin_sha256 }`).
-  **This producer pipeline does not exist yet — see §5 Increment 2.**
+  The producer pipeline has shipped; current consumers are pinned to its release assets.
 - **Consumer (`apodictic-tauri`):**
   - `gemini-web.lock` — `{ repo, tag, commit, web_version, plugin_version, payload_asset,
     tree_hash_schema, dist_sha256, plugin_sha256, sidecars: [{ target, sha256 }], status, source }`. **Per-component

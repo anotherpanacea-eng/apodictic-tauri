@@ -8,6 +8,6 @@ the per-target `app-sidecar` binaries, the bundled `apodictic-plugin/`, and `pay
 the source of truth. `tauri build` resolves `frontendDist` / `externalBin` / `resources` from here,
 so run `npm run sync:web` before building.
 
-Until APODICTIC-Gemini ships a desktop-payload release asset (migration Increment 2 — see
-`docs/architecture.md` §5), the lock is in `bootstrap` state and this directory stays empty except
-for this README.
+APODICTIC-Gemini now ships versioned desktop-payload release assets. The committed lock must remain
+`pinned` with the collision-unambiguous v2 tree-hash schema; bootstrap and unknown states fail closed.
+The ignored payload bytes are populated on demand by the sync tool.

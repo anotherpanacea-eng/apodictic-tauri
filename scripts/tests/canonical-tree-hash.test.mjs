@@ -54,6 +54,13 @@ test("manifest schema accepts only absent legacy or exact v2", () => {
   ]) assert.throws(() => requireV2TreeHashLock(lock), /not pinned|lacks/);
 });
 
+test("operator docs cannot restore the retired bootstrap no-op", () => {
+  const root = path.resolve(import.meta.dirname, "../..");
+  const text = ["AGENTS.md", "docs/architecture.md", "vendor/gemini-web/README.md"].map((file) => fs.readFileSync(path.join(root, file), "utf8")).join("\n");
+  for (const stale of ["bootstrap state the gate is a no-op", "producer pipeline does not exist", "lock is in `bootstrap` state"]) assert.equal(text.includes(stale), false, stale);
+  assert.match(text, /Bootstrap or any other status fails closed/);
+});
+
 test("canonical tree hash retains null for a missing root", (t) => {
   const directory = temporaryDirectory(t);
   assert.equal(hashTree(path.join(directory, "missing")), null);
