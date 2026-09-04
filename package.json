@@ -12,6 +12,7 @@
     "desktop:build": "npm run sync:web && tauri build"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.10.1"
+    "@tauri-apps/cli": "^2.10.1",
+    "yaml": "^2.8.1"
   }
 }

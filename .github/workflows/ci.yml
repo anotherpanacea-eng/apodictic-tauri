@@ -1,68 +1,98 @@
-name: CI
+name: ci
+
+# Ordinary work remains draft and unarmed. Only a same-repository disposable
+# train, or an explicitly authorized standalone exception, spends this job.
+run-name: >-
+  apodictic-tauri-ci pr=${{ github.event.pull_request.number }}
+  action=${{ github.event.action }}
+  train=${{ github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'train/') }}
+  ci-ready-event=${{ github.event.label.name == 'ci-ready' }}
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, labeled, unlabeled, closed]
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: >-
+    apodictic-tauri-ci-${{ github.event.pull_request.number }}-${{ (contains(fromJSON('["opened","synchronize","reopened","ready_for_review","converted_to_draft","closed"]'), github.event.action) || (!(github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'train/')) && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && github.event.label.name == 'ci-ready')) && 'clearance' || github.run_id }}
   cancel-in-progress: true
 
 jobs:
-  rust:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    name: Rust shell (build + clippy)
+  validate:
+    if: >-
+      ${{ github.event.pull_request.draft == false &&
+          ((github.event.pull_request.head.repo.full_name == github.repository &&
+            startsWith(github.event.pull_request.head.ref, 'train/') &&
+            contains(fromJSON('["opened","synchronize","reopened","ready_for_review"]'), github.event.action)) ||
+           (!(github.event.pull_request.head.repo.full_name == github.repository &&
+              startsWith(github.event.pull_request.head.ref, 'train/')) &&
+            !(github.event.pull_request.head.repo.full_name == github.repository &&
+              github.event.pull_request.head.ref == 'chore/sync-gemini-web') &&
+            contains(github.event.pull_request.labels.*.name, 'ci-ready') &&
+            (contains(fromJSON('["opened","synchronize","reopened","ready_for_review"]'), github.event.action) ||
+             (github.event.action == 'labeled' && github.event.label.name == 'ci-ready')))) }}
     runs-on: macos-latest
-    defaults:
-      run:
-        working-directory: src-tauri
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Bind billed job to the exact pull-request merge
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MERGE_SHA: ${{ github.sha }}
+          JOB_NAME: ${{ github.job }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: >-
+          node scripts/check-pr-merge-binding.mjs
+          --repository "$REPOSITORY"
+          --base "$BASE_SHA" --head "$HEAD_SHA" --github-sha "$MERGE_SHA"
+          --job "$JOB_NAME" --run-id "$RUN_ID" --run-attempt "$RUN_ATTEMPT"
+      - name: Install Node dependencies
+        run: npm ci
+      - name: Draft-first train policy tests
+        run: >-
+          node --test
+          tests/policy/ci-policy.test.mjs
+          tests/policy/merge-train.test.mjs
+          tests/policy/pr-merge-binding.test.mjs
+          tests/policy/sync-pr-draft.test.mjs
+          tests/policy/train-ci-receipts.test.mjs
+          tests/policy/landing.test.mjs
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      # Compile against the published bytes pinned by gemini-web.lock, not stubs or a moving latest
-      # release. The separate drift-gate job owns freshness enforcement.
       - name: Sync pinned desktop payload
-        working-directory: ${{ github.workspace }} # override the job's src-tauri default — paths are repo-root-relative
         run: node scripts/sync-gemini-web.mjs --pinned
         env:
           GEMINI_SYNC_TOKEN: ${{ secrets.GEMINI_SYNC_TOKEN }}
       - name: Require downloaded bytes to match committed lock
-        working-directory: ${{ github.workspace }}
         run: git diff --exit-code -- gemini-web.lock
-      # The pinned sync already downloaded and hash-verified the payload. Run
-      # freshness against those same bytes here instead of renting a second
-      # Linux runner to repeat the checkout and network work.
       - name: Vendor drift gate
-        working-directory: ${{ github.workspace }}
         run: node scripts/sync-gemini-web.mjs --check
         env:
           GEMINI_SYNC_TOKEN: ${{ secrets.GEMINI_SYNC_TOKEN }}
-      - run: cargo test
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo build
+      - name: Packaging probe behavior and tamper tests
+        run: npm run test:packaging-probe
+      - name: Rust tests
+        working-directory: src-tauri
+        run: cargo test --locked
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Rust build
+        working-directory: src-tauri
+        run: cargo build --locked
       - name: Verify vendored sidecar runtime contract
-        working-directory: ${{ github.workspace }}
         run: node scripts/verify-sidecar-runtime.mjs
-
-  # NOTE: the Rust job now executes the real pinned macOS sidecar contract. A full `tauri build`
-  # installer smoke remains future work. Windows build/smoke is gated behind a Windows runner —
-  # v1 is macOS-only (docs/architecture.md §5/§9-E).

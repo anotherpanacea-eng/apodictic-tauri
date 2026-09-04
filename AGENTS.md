@@ -6,10 +6,11 @@ follow. It governs the maintainer's own agent sessions.
 
 ## Fleet / cross-repo context
 
-This repo is one of **five** maintained together (all `github.com/anotherpanacea-eng`):
+This repo is one of **six** maintained together (all `github.com/anotherpanacea-eng`):
 `setec-voiceprint` (producer · public · Python), `apodictic` (consumer + producer · public ·
 Python), `setec-voicewright` (consumer · private · Python), `APODICTIC-Gemini` (consumer ·
-private · TS web app), and `apodictic-tauri` (consumer · private · Rust + TS — **this repo**).
+private · TS web app), `apodictic-tauri` (consumer · private · Rust + TS — **this repo**), and
+`wandering-inn-reader` (independent reader application).
 
 **This repo's dependency contract:**
 - **Consumes** `APODICTIC-Gemini`'s versioned **desktop payload** (built `dist/` + per-target
@@ -28,8 +29,8 @@ the model-provider abstraction (incl. local-LLM backends) live **below** this sh
 `apodictic` + `APODICTIC-Gemini`'s `server/`. Never put analysis logic in the Rust/JS command
 layer — keep the shell replaceable.
 
-**Shared workflow:** spec→review→write→review→fix→merge; merge commits, never squash; Codex 5.5
-is the PR review step (don't merge out from under it); version bumps at merge. (Detail below.)
+**Shared workflow:** spec→review→write→review→fix→periodic integration train; landing preserves
+merge structure and adds no bytes. Codex is a standing review lane; do not merge out from under it.
 
 **Protect-public-only:** this is a **private** repo, so no branch protection is configured (the
 fleet only protects the public repos). The Codex review gate is still observed by convention.
@@ -129,18 +130,21 @@ normal merge policy.
 - Run `sync:web` before `desktop:build` — `frontendDist`/`externalBin`/`resources` resolve to
   `vendor/gemini-web/`, and there is no fallback build-from-source path.
 
-## PRs and merges
+## PRs and integration trains
 
-- **Default to PR-per-change with a merge commit** (`gh pr merge <N> --merge`), not squash —
-  preserves the spec-review-fix structure on `main`.
-- **Delete the branch on merge** (`--delete-branch`).
-- **Bump the version at merge, not in the PR** (open PRs merge in unknown order).
-- **Codex 5.5 is the standing PR reviewer; don't merge out from under it.** Make the obvious
-  fixes, then let its pass run. Auto-merge only on dual agreement (Claude + Codex, CI green,
-  threads resolved); otherwise hold for the second opinion.
-- **`gh` OAuth workflow-scope merge block.** A PR touching `.github/workflows/` can't be merged
-  with the `gh` OAuth token (403). Fallback: local `git merge --no-ff` into a `main` worktree →
-  push (needs explicit OK for the direct-to-main push), or merge via the web UI.
+- Ordinary and automated work opens as an unarmed draft. Do not add `ci-ready` during normal cadence.
+- Periodically freeze exact reviewed heads into a fresh same-repository `train/<bounded-name>` branch
+  based on exact `origin/main`. Merge constituents with `--no-ff` and keep an external closed inventory.
+- Version/changelog work, when needed, is an explicitly inventoried and reviewed train-only commit
+  made before freeze. The landing adds no bytes.
+- Promote the frozen train exactly once. It spends one full CI job per train; constituent drafts and
+  label noise consume no runner. `ci-ready` is reserved for a deliberate standalone exception.
+- Land only a live green receipt bound to exact base, head, singleton job, run attempt, and GitHub
+  synthetic merge. Push `main` with an exact expected-head lease, prove containment/closure, and delete
+  only unchanged same-repository branches under their own leases.
+- GitHub Pro rulesets, branch protection, Merge Queue, squash, and ad-hoc direct pushes are not part of
+  this private-repository protocol. Safety comes from exact receipts, independent reviews, and CAS.
+- The exact-head generic, fleet-posture, and CI review lanes must all approve before promotion/landing.
 
 ### Branch naming
 
@@ -148,18 +152,13 @@ normal merge policy.
   `chore/<short-description>` / `docs/<short-description>` ancillary ·
   `codex/<short-description>` Codex-authored proposals.
 
-### When to skip the PR
-
-Direct push to `main` is fine for typo fixes, README/doc prose, and single-line non-behavioral
-corrections. Anything that changes the shell's behavior, the vendor boundary, the build, CI, or
-the security chain lands via PR.
-
 ## CI
 
-`.github/workflows/ci.yml` runs: `cargo build`/`clippy` on `src-tauri/`, the
-`sync-gemini-web.mjs --check` drift gate, and (where a macOS runner is available) a `tauri build`
-smoke against a vendored payload. Windows build/smoke is gated behind a Windows runner (v1 is
-macOS-only). `.github/workflows/sync-gemini-web.yml` opens the weekly payload-bump PR.
+`.github/workflows/ci.yml` is pull-request-only and has one bounded `macos-latest` validation job.
+It preserves payload sync/drift, packaging-policy, Rust test/clippy/build, and sidecar gates. Only a
+promoted same-repository train or explicit non-sync `ci-ready` standalone can run it; there is no
+duplicate push-to-main run. `.github/workflows/sync-gemini-web.yml` opens or updates the weekly payload
+bump PR as a draft and independently proves it remains draft and unarmed.
 
 ## Security (do not regress)
 
