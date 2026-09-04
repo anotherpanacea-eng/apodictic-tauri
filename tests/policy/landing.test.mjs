@@ -51,6 +51,10 @@ test("controlled bare repository ignores ambient Git injection and has only requ
   try {
     const keys = run(directory, ["config", "--local", "--name-only", "--get-regexp", ".*"]).split(/\r?\n/);
     assert.ok(!keys.some((key) => /credential|include|insteadof/i.test(key)));
+    assert.ok(keys.every((key) => [
+      "core.repositoryformatversion", "core.filemode", "core.bare", "core.logallrefupdates",
+      "core.symlinks", "core.ignorecase", "core.precomposeunicode", "extensions.objectformat",
+    ].includes(key)));
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
     for (const [key, value] of Object.entries(prior)) {

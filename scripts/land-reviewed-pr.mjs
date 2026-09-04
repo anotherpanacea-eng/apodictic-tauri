@@ -47,9 +47,10 @@ export function createControlledBare(parent = os.tmpdir()) {
   const init = spawnSync("git", ["init", "--bare", directory], { env: safeGitEnvironment(), encoding: "utf8", windowsHide: true });
   if (init.status !== 0) throw new PolicyError("cannot initialize controlled transport");
   const keys = String(git(directory, ["config", "--local", "--name-only", "--get-regexp", ".*"])).trim().split(/\r?\n/).filter(Boolean);
+  // Apple Git records core.precomposeunicode after probing the new repository's filesystem.
   const allowed = new Set([
     "core.repositoryformatversion", "core.filemode", "core.bare", "core.logallrefupdates",
-    "core.symlinks", "core.ignorecase", "extensions.objectformat",
+    "core.symlinks", "core.ignorecase", "core.precomposeunicode", "extensions.objectformat",
   ]);
   if (keys.some((key) => !allowed.has(key))) throw new PolicyError("controlled transport has unexpected local config");
   return directory;
