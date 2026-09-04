@@ -37,8 +37,9 @@ draft" below. A train must complete every field before promotion.
 - **Train-only fixes:**
 - **Local validation receipts:**
 - **Exact-head generic / fleet-posture / CI reviews:**
-  <!-- One compact JSON comment per lane, all bound to Frozen HEAD:
-  apodictic-exact-head-review/1; lanes generic, fleet-posture, ci; verdict approved. -->
+  <!-- One compact apodictic-exact-head-review JSON comment per lane, all bound
+  to Frozen HEAD; schema apodictic-tauri-exact-head-review/1; lanes generic,
+  fleet-posture, ci; verdict approved. -->
 - **Promotion and exact-base CAS landing protocol:**
 
 ## Standalone exception
