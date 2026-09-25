@@ -66,6 +66,7 @@ jobs:
           tests/policy/sync-pr-draft.test.mjs
           tests/policy/train-ci-receipts.test.mjs
           tests/policy/landing.test.mjs
+          tests/policy/claude-workflow.test.mjs
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
