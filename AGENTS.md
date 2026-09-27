@@ -162,6 +162,9 @@ promoted same-repository train or explicit same-repository non-sync `ci-ready` s
 fork events remain zero-step, and there is no
 duplicate push-to-main run. `.github/workflows/sync-gemini-web.yml` opens or updates the weekly payload
 bump PR as a draft and independently proves it remains draft and unarmed.
+`.github/workflows/claude.yml` runs claude-code-action only when an owner, member, or collaborator
+mentions `@claude` in a comment, review, or new issue; it never runs on `pull_request`, refuses
+fork PRs before checkout, and `tests/policy/claude-workflow.test.mjs` guards those boundaries.
 
 ## Security (do not regress)
 
