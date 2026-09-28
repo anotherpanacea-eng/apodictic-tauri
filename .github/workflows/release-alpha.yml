@@ -78,7 +78,7 @@ jobs:
           VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          engine=$(node -p "require('./gemini-web.lock').tag")
+          engine=$(node -p "JSON.parse(require('fs').readFileSync('gemini-web.lock', 'utf8')).tag")
           cat > release-notes.md <<EOF
           Alpha build of the APODICTIC desktop app (engine ${engine}). macOS only.
 
@@ -90,7 +90,8 @@ jobs:
 
               xattr -dr com.apple.quarantine /Applications/APODICTIC.app
 
-          Everything runs on your machine. Bring your own provider key or a signed-in CLI.
+          Add your own provider key or connect a supported local provider. Manuscripts stay on
+          your machine except for requests sent to the provider you choose.
           EOF
           gh release create "desktop-v$VERSION" release-assets/* \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
