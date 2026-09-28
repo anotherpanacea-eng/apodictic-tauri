@@ -46,9 +46,9 @@ test("concurrency revokes canonically and isolates all label noise", () => {
 
 test("workflow inventory and stable cost topology are closed", () => {
   const names = fs.readdirSync(workflowDir).filter((name) => /\.ya?ml$/i.test(name)).sort();
-  assert.deepEqual(names, ["ci.yml", "claude.yml", "sync-gemini-web.yml"]);
+  assert.deepEqual(names, ["ci.yml", "claude.yml", "release-alpha.yml", "sync-gemini-web.yml"]);
   const ci = load("ci.yml");
-  for (const workflow of [ci, load("sync-gemini-web.yml")]) {
+  for (const workflow of [ci, load("sync-gemini-web.yml"), load("release-alpha.yml")]) {
     for (const candidate of Object.values(workflow.jobs)) {
       for (const forbidden of ["strategy", "services", "container", "continue-on-error"]) assert.equal(candidate[forbidden], undefined);
       for (const step of candidate.steps) assert.equal(step["continue-on-error"], undefined);
@@ -106,6 +106,20 @@ test("auxiliary workflows retain their bounded topology", () => {
   assert.match(sync.jobs.sync.steps[actionIndex + 1].run, /ensure-sync-pr-draft/);
   assert.equal(sync.jobs.sync.steps[actionIndex - 1].env.GH_TOKEN, "${{ github.token }}");
   assert.equal(sync.jobs.sync.steps[actionIndex + 1].env.GH_TOKEN, "${{ github.token }}");
+});
+
+test("alpha release stays owner-dispatched and pinned to the committed lock", () => {
+  const release = load("release-alpha.yml");
+  assert.deepEqual(Object.keys(release.on), ["workflow_dispatch"]);
+  assert.deepEqual(Object.keys(release.on.workflow_dispatch.inputs), ["version"]);
+  assert.deepEqual(release.permissions, { contents: "write" });
+  assert.deepEqual(Object.keys(release.jobs), ["release"]);
+  const runs = release.jobs.release.steps.flatMap((step) => typeof step.run === "string" ? [step.run.trim()] : []);
+  const index = (command) => runs.findIndex((run) => run === command);
+  assert.ok(index("node scripts/sync-gemini-web.mjs --pinned") >= 0);
+  assert.ok(index("git diff --exit-code -- gemini-web.lock") > index("node scripts/sync-gemini-web.mjs --pinned"));
+  assert.equal(runs.filter((run) => /sync-gemini-web\.mjs(?! --pinned)/.test(run)).length, 0);
+  assert.ok(runs.some((run) => run.includes("--prerelease")));
 });
 
 test("external action contract and operator policy are explicit", () => {
