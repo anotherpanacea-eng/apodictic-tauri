@@ -5,8 +5,14 @@
   "windows": [
     "main"
   ],
+  "remote": {
+    "urls": [
+      "http://127.0.0.1:3001/*"
+    ]
+  },
   "permissions": [
     "core:default",
-    "stronghold:default"
+    "stronghold:default",
+    "stronghold:allow-remove-store-record"
   ]
 }
