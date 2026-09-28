@@ -19,3 +19,14 @@ test("the vault capability covers the page the shell loads, and nothing wider", 
   assert.deepEqual(capability.remote, { urls: [`${origin}/*`] });
   assert.deepEqual(capability.permissions, ["core:default", "stronghold:default", "stronghold:allow-remove-store-record"]);
 });
+
+// Installed apps verify every update against this key; a placeholder would make every update fail.
+test("the updater checks the release feed with a real minisign public key", () => {
+  const config = JSON.parse(fs.readFileSync(path.join(root, "src-tauri", "tauri.conf.json"), "utf8"));
+  const updater = config.plugins.updater;
+  assert.deepEqual(updater.endpoints, [
+    "https://github.com/anotherpanacea-eng/apodictic-tauri/releases/download/desktop-updater/latest.json",
+  ]);
+  assert.match(Buffer.from(updater.pubkey, "base64").toString("utf8"), /^untrusted comment: minisign public key/);
+  assert.equal(config.bundle.createUpdaterArtifacts, true);
+});

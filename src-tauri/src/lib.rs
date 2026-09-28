@@ -5,12 +5,19 @@ use reqwest::blocking::Client;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
-use tauri_plugin_shell::process::CommandEvent;
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_updater::UpdaterExt;
 
 const APP_ID: &str = "com.anotherpanacea.apodictic";
+
+/// The running sidecar, kept so an update can stop it before the installer replaces its binary
+/// (Windows will not overwrite a running executable).
+struct Sidecar(Mutex<Option<CommandChild>>);
 
 #[derive(Debug, Deserialize)]
 struct SidecarHealth {
@@ -144,14 +151,74 @@ fn start_sidecar(app: &AppHandle) -> Result<(), String> {
         }
         std::thread::sleep(Duration::from_millis(500));
     }
-    
+
+    *app.state::<Sidecar>().0.lock().unwrap() = Some(child);
     Ok(())
+}
+
+/// Ask the release feed for a newer version and, if the user agrees, install it and restart.
+/// Runs from Rust so the sidecar page never needs updater permissions. A failed check is logged
+/// and otherwise ignored: an offline launch must still work.
+fn check_for_update(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let update = match app.updater() {
+            Ok(updater) => match updater.check().await {
+                Ok(Some(update)) => update,
+                Ok(None) => return,
+                Err(error) => {
+                    eprintln!("[Updater] Check failed: {error}");
+                    return;
+                }
+            },
+            Err(error) => {
+                eprintln!("[Updater] Unavailable: {error}");
+                return;
+            }
+        };
+        let handle = app.clone();
+        app.dialog()
+            .message(format!(
+                "APODICTIC {} is available. You have {}.\n\nInstall it now? APODICTIC will restart.",
+                update.version, update.current_version
+            ))
+            .title("Update available")
+            .buttons(MessageDialogButtons::OkCancelCustom(
+                "Install and restart".into(),
+                "Later".into(),
+            ))
+            .show(move |install| {
+                if !install {
+                    return;
+                }
+                tauri::async_runtime::spawn(async move {
+                    if let Some(child) = handle.state::<Sidecar>().0.lock().unwrap().take() {
+                        let _ = child.kill();
+                    }
+                    match update.download_and_install(|_, _| {}, || {}).await {
+                        Ok(()) => handle.restart(),
+                        Err(error) => {
+                            handle
+                                .dialog()
+                                .message(format!(
+                                    "The update couldn't be installed: {error}\n\nRestart APODICTIC to keep using this version."
+                                ))
+                                .title("Update failed")
+                                .kind(MessageDialogKind::Error)
+                                .show(|_| {});
+                        }
+                    }
+                });
+            });
+    });
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(Sidecar(Mutex::new(None)))
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_stronghold::Builder::new(|password| {
                 // We use SHA-256 here since `password` is already a 44-character B64 high entropy string
@@ -179,6 +246,7 @@ pub fn run() {
                         Ok(_) => {
                             println!("[Main] Redirecting window to local sidecar UI");
                             let _ = window.eval("window.location.replace('http://127.0.0.1:3001')");
+                            check_for_update(app.handle().clone());
                         }
                         Err(e) => {
                             let error_html = format!("document.body.innerHTML = '<div style=\"padding:40px;font-family:sans-serif;color:white;background:#b91c1c;min-height:100vh;\"><h2>Startup Error</h2><p>{}</p></div>';", e);
