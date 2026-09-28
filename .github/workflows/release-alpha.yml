@@ -1,0 +1,97 @@
+name: Release alpha desktop build
+
+# Manual, owner-dispatched alpha release. Builds the pinned Gemini payload into unsigned (ad-hoc
+# signed) macOS .dmg bundles for Apple Silicon and Intel, then publishes them as a GitHub
+# prerelease tagged desktop-v<version>. No Developer ID, notarization or updater feed: testers
+# must clear Gatekeeper by hand, as the release notes say. Windows stays gated (architecture §5).
+
+run-name: apodictic-tauri-release-alpha version=${{ inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Alpha version, e.g. 0.1.0-alpha.1"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apodictic-tauri-release-alpha
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Require an alpha prerelease version and an unused tag
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+$'; then
+            echo "::error::version must look like 0.1.0-alpha.1"
+            exit 1
+          fi
+          if gh release view "desktop-v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::release desktop-v$VERSION already exists"
+            exit 1
+          fi
+      - name: Install Node dependencies
+        run: npm ci
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Sync pinned desktop payload
+        run: node scripts/sync-gemini-web.mjs --pinned
+        env:
+          GEMINI_SYNC_TOKEN: ${{ secrets.GEMINI_SYNC_TOKEN }}
+      - name: Require downloaded bytes to match committed lock
+        run: git diff --exit-code -- gemini-web.lock
+      - name: Verify vendored sidecar runtime contract
+        run: node scripts/verify-sidecar-runtime.mjs
+      - name: Build ad-hoc signed dmg bundles
+        env:
+          VERSION: ${{ inputs.version }}
+          APPLE_SIGNING_IDENTITY: "-"
+        run: |
+          mkdir -p release-assets
+          for target in aarch64-apple-darwin x86_64-apple-darwin; do
+            npx tauri build --target "$target" --bundles dmg --config "{\"version\":\"$VERSION\"}"
+            arch="${target%%-*}"
+            src=$(ls src-tauri/target/"$target"/release/bundle/dmg/*.dmg)
+            cp "$src" "release-assets/APODICTIC-$VERSION-macos-$arch.dmg"
+          done
+          (cd release-assets && shasum -a 256 *.dmg > SHA256SUMS.txt)
+      - name: Publish prerelease
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          engine=$(node -p "require('./gemini-web.lock').tag")
+          cat > release-notes.md <<EOF
+          Alpha build of the APODICTIC desktop app (engine ${engine}). macOS only.
+
+          - Apple Silicon: APODICTIC-${VERSION}-macos-aarch64.dmg
+          - Intel: APODICTIC-${VERSION}-macos-x86_64.dmg
+
+          This build is not notarized. After dragging APODICTIC to Applications, open it once
+          with right-click > Open, or run:
+
+              xattr -dr com.apple.quarantine /Applications/APODICTIC.app
+
+          Everything runs on your machine. Bring your own provider key or a signed-in CLI.
+          EOF
+          gh release create "desktop-v$VERSION" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "APODICTIC desktop $VERSION" --notes-file release-notes.md
