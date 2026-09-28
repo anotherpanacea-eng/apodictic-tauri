@@ -296,8 +296,9 @@ flagged. Plan early:
 - **B. Updater endpoint + signing identities:** GitHub-Releases-backed updater vs. self-hosted; provide the
   Apple Developer ID (+ later Windows Authenticode) certs when ready. *Blocks a shippable signed v1, not the
   extraction or the macOS dev/build.*
-- **E. Windows target:** stand up a Windows CI runner to build/sign the Windows sidecar + installer. *Gated;
-  v1 payload is macOS-only until then (§5 Increment 2).*
+- **E. Windows target:** *Unsigned alpha builds added 2026-09-28.* Gemini's `release-desktop-payload.yml` builds
+  and runtime-verifies the Windows sidecar on `windows-latest`, and `release-alpha.yml` builds an unsigned
+  NSIS installer there. Still open: an Authenticode certificate for a signed installer.
 - **D. SETEC local path:** the apodictic-plugin is already bundled. A local SETEC path (for the deterministic
   substrate tier offline) is future, via the provider/substrate tiering — out of scope for the extraction.
 

@@ -113,13 +113,21 @@ test("alpha release stays owner-dispatched and pinned to the committed lock", ()
   assert.deepEqual(Object.keys(release.on), ["workflow_dispatch"]);
   assert.deepEqual(Object.keys(release.on.workflow_dispatch.inputs), ["version"]);
   assert.deepEqual(release.permissions, { contents: "write" });
-  assert.deepEqual(Object.keys(release.jobs), ["release"]);
-  const runs = release.jobs.release.steps.flatMap((step) => typeof step.run === "string" ? [step.run.trim()] : []);
-  const index = (command) => runs.findIndex((run) => run === command);
-  assert.ok(index("node scripts/sync-gemini-web.mjs --pinned") >= 0);
-  assert.ok(index("git diff --exit-code -- gemini-web.lock") > index("node scripts/sync-gemini-web.mjs --pinned"));
-  assert.equal(runs.filter((run) => /sync-gemini-web\.mjs(?! --pinned)/.test(run)).length, 0);
-  assert.ok(runs.some((run) => run.includes("--prerelease")));
+  assert.deepEqual(Object.keys(release.jobs), ["check", "macos", "windows", "publish"]);
+  const runsOf = (job) => release.jobs[job].steps.flatMap((step) => typeof step.run === "string" ? [step.run.trim()] : []);
+  for (const job of ["macos", "windows"]) {
+    assert.equal(release.jobs[job].needs, "check");
+    const runs = runsOf(job);
+    const index = (command) => runs.findIndex((run) => run === command);
+    assert.ok(index("node scripts/sync-gemini-web.mjs --pinned") >= 0, job);
+    assert.ok(index("git diff --exit-code -- gemini-web.lock") > index("node scripts/sync-gemini-web.mjs --pinned"), job);
+    assert.ok(index("node scripts/verify-sidecar-runtime.mjs") > index("git diff --exit-code -- gemini-web.lock"), job);
+  }
+  const allRuns = Object.keys(release.jobs).flatMap(runsOf);
+  assert.equal(allRuns.filter((run) => /sync-gemini-web\.mjs(?! --pinned)/.test(run)).length, 0);
+  assert.deepEqual(release.jobs.publish.needs, ["macos", "windows"]);
+  assert.equal(release.jobs.publish.if, "github.ref == 'refs/heads/main'");
+  assert.ok(runsOf("publish").some((run) => run.includes("--prerelease")));
 });
 
 test("external action contract and operator policy are explicit", () => {
