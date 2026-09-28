@@ -1,9 +1,11 @@
 name: Release alpha desktop build
 
 # Manual, owner-dispatched alpha release. Builds the pinned Gemini payload into unsigned (ad-hoc
-# signed) macOS .dmg bundles for Apple Silicon and Intel, then publishes them as a GitHub
-# prerelease tagged desktop-v<version>. No Developer ID, notarization or updater feed: testers
-# must clear Gatekeeper by hand, as the release notes say. Windows stays gated (architecture §5).
+# signed) macOS .dmg bundles for Apple Silicon and Intel and an unsigned Windows NSIS installer,
+# then publishes them as a GitHub prerelease tagged desktop-v<version>. No Developer ID,
+# Authenticode, notarization or updater feed: testers clear Gatekeeper or SmartScreen by hand, as
+# the release notes say. A dispatch from a branch other than main builds everything and publishes
+# nothing, so the workflow can be rehearsed before it lands.
 
 run-name: apodictic-tauri-release-alpha version=${{ inputs.version }}
 
@@ -22,15 +24,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    runs-on: macos-latest
-    timeout-minutes: 60
+  check:
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
       - name: Require an alpha prerelease version and an unused tag
         env:
           VERSION: ${{ inputs.version }}
@@ -44,6 +40,17 @@ jobs:
             echo "::error::release desktop-v$VERSION already exists"
             exit 1
           fi
+
+  macos:
+    needs: check
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
       - name: Install Node dependencies
         run: npm ci
       - uses: dtolnay/rust-toolchain@stable
@@ -72,23 +79,87 @@ jobs:
             src=$(ls src-tauri/target/"$target"/release/bundle/dmg/*.dmg)
             cp "$src" "release-assets/APODICTIC-$VERSION-macos-$arch.dmg"
           done
-          (cd release-assets && shasum -a 256 *.dmg > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-bundles
+          path: release-assets/*.dmg
+          if-no-files-found: error
+
+  windows:
+    needs: check
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install Node dependencies
+        run: npm ci
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Sync pinned desktop payload
+        run: node scripts/sync-gemini-web.mjs --pinned
+        env:
+          GEMINI_SYNC_TOKEN: ${{ secrets.GEMINI_SYNC_TOKEN }}
+      - name: Require downloaded bytes to match committed lock
+        run: git diff --exit-code -- gemini-web.lock
+      - name: Verify vendored sidecar runtime contract
+        run: node scripts/verify-sidecar-runtime.mjs
+      - name: Build unsigned NSIS installer
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          mkdir -p release-assets
+          npx tauri build --target x86_64-pc-windows-msvc --bundles nsis --config "{\"version\":\"$VERSION\"}"
+          src=$(ls src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe)
+          cp "$src" "release-assets/APODICTIC-$VERSION-windows-x86_64-setup.exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: release-assets/*.exe
+          if-no-files-found: error
+
+  publish:
+    needs: [macos, windows]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
       - name: Publish prerelease
         env:
           VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ github.token }}
         run: |
+          (cd release-assets && sha256sum *.dmg *.exe > SHA256SUMS.txt)
           engine=$(node -p "JSON.parse(require('fs').readFileSync('gemini-web.lock', 'utf8')).tag")
           cat > release-notes.md <<EOF
-          Alpha build of the APODICTIC desktop app (engine ${engine}). macOS only.
+          Alpha build of the APODICTIC desktop app (engine ${engine}) for macOS and Windows.
 
-          - Apple Silicon: APODICTIC-${VERSION}-macos-aarch64.dmg
-          - Intel: APODICTIC-${VERSION}-macos-x86_64.dmg
+          - Apple Silicon Mac: APODICTIC-${VERSION}-macos-aarch64.dmg
+          - Intel Mac: APODICTIC-${VERSION}-macos-x86_64.dmg
+          - Windows 10 or 11 (64-bit): APODICTIC-${VERSION}-windows-x86_64-setup.exe
 
-          This build is not notarized. After dragging APODICTIC to Applications, open it once
-          with right-click > Open, or run:
+          These builds are not notarized or code-signed.
+
+          On a Mac, drag APODICTIC to Applications, then open it once with right-click > Open, or run:
 
               xattr -dr com.apple.quarantine /Applications/APODICTIC.app
+
+          On Windows, SmartScreen may warn that the installer is unrecognized. Choose
+          More info > Run anyway.
 
           Add your own provider key or connect a supported local provider. Manuscripts stay on
           your machine except for requests sent to the provider you choose.

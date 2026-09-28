@@ -1,23 +1,27 @@
 {
   "repo": "anotherpanacea-eng/APODICTIC-Gemini",
-  "tag": "v0.3.1",
-  "commit": "59fe2442415e68599e2dab85e700a80472846bd4",
-  "web_version": "0.3.1",
+  "tag": "v0.3.2",
+  "commit": "4c6c5a6fcf3bb3cb7c7e0cbcf48e8e4602973ce8",
+  "web_version": "0.3.2",
   "plugin_version": "2.11.0",
-  "payload_asset": "desktop-payload-0.3.1.tar.gz",
+  "payload_asset": "desktop-payload-0.3.2.tar.gz",
   "tree_hash_schema": "apodictic-tree-sha256-v2",
   "dist_sha256": "ba3a5bbe51957c96440ca495fd2c5c7de72ced04563c9e7e88136850387589d6",
   "plugin_sha256": "0716e2d9bdf3f4adabb902efb48d0dafa8868c22399f2d025d9ada6f22f7b7cc",
   "sidecars": [
     {
       "target": "aarch64-apple-darwin",
-      "sha256": "fb0656a7f0250e19b29078d971e0fe2ed7d3c8fe9aaf41d610e115461d58ff7c"
+      "sha256": "942e07f55bc575b44fb9edeb97abc6b790a4a607ad42abc54bb79b1e5f8ee145"
     },
     {
       "target": "x86_64-apple-darwin",
-      "sha256": "52d8842d8411d7f68ea5eed4016c9c635be5bdc8a3d8c2df10d2f899e3f59915"
+      "sha256": "18b5b19161e04343ece2d2fcf7829db2abae8ec985d033c6b10040ad22490cba"
+    },
+    {
+      "target": "x86_64-pc-windows-msvc.exe",
+      "sha256": "7dc995a850888ba230927650817fcd60fe87edd2f5a97b0b40cfc98abf654262"
     }
   ],
   "status": "pinned",
-  "source": "https://github.com/anotherpanacea-eng/APODICTIC-Gemini/releases/tag/v0.3.1"
+  "source": "https://github.com/anotherpanacea-eng/APODICTIC-Gemini/releases/tag/v0.3.2"
 }
