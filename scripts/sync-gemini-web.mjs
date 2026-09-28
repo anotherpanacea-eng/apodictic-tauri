@@ -175,7 +175,9 @@ async function downloadAndExtractPayload(rel, destDir) {
   const archivePath = path.join(destDir, payloadAsset.name);
   await dl(payloadAsset, archivePath);
   await dl(manifestAsset, path.join(destDir, "payload-manifest.json"));
-  execFileSync("tar", ["-xzf", archivePath, "-C", destDir], { stdio: "inherit" });
+  // Relative paths from destDir: GNU tar (Git Bash on Windows, the release runner's shell) reads a
+  // drive-letter path like D:\a\... as a remote host:path and fails.
+  execFileSync("tar", ["-xzf", payloadAsset.name, "-C", "."], { cwd: destDir, stdio: "inherit" });
   fs.rmSync(archivePath, { force: true });
   return { payloadAsset, manifest: JSON.parse(fs.readFileSync(path.join(destDir, "payload-manifest.json"), "utf8")) };
 }
