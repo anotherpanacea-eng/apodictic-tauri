@@ -4,8 +4,10 @@ name: Release alpha desktop build
 # signed) macOS .dmg bundles for Apple Silicon and Intel and an unsigned Windows NSIS installer,
 # then publishes them as a GitHub prerelease tagged desktop-v<version>. No Developer ID,
 # Authenticode, notarization or updater feed: testers clear Gatekeeper or SmartScreen by hand, as
-# the release notes say. A dispatch from a branch other than main builds everything and publishes
-# nothing, so the workflow can be rehearsed before it lands.
+# the release notes say. Each build is also signed with the updater key, and publishing moves the
+# desktop-updater release's latest.json to this version, which installed apps check on launch.
+# A dispatch from a branch other than main builds everything and publishes nothing, so the
+# workflow can be rehearsed before it lands.
 
 run-name: apodictic-tauri-release-alpha version=${{ inputs.version }}
 
@@ -67,22 +69,26 @@ jobs:
         run: git diff --exit-code -- gemini-web.lock
       - name: Verify vendored sidecar runtime contract
         run: node scripts/verify-sidecar-runtime.mjs
-      - name: Build ad-hoc signed dmg bundles
+      - name: Build ad-hoc signed dmg bundles and signed update archives
         env:
           VERSION: ${{ inputs.version }}
           APPLE_SIGNING_IDENTITY: "-"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           mkdir -p release-assets
           for target in aarch64-apple-darwin x86_64-apple-darwin; do
-            npx tauri build --target "$target" --bundles dmg --config "{\"version\":\"$VERSION\"}"
+            npx tauri build --target "$target" --bundles app,dmg --config "{\"version\":\"$VERSION\"}"
             arch="${target%%-*}"
-            src=$(ls src-tauri/target/"$target"/release/bundle/dmg/*.dmg)
-            cp "$src" "release-assets/APODICTIC-$VERSION-macos-$arch.dmg"
+            bundle="src-tauri/target/$target/release/bundle"
+            cp "$(ls "$bundle"/dmg/*.dmg)" "release-assets/APODICTIC-$VERSION-macos-$arch.dmg"
+            cp "$bundle/macos/APODICTIC.app.tar.gz" "release-assets/APODICTIC-$VERSION-macos-$arch.app.tar.gz"
+            cp "$bundle/macos/APODICTIC.app.tar.gz.sig" "release-assets/APODICTIC-$VERSION-macos-$arch.app.tar.gz.sig"
           done
       - uses: actions/upload-artifact@v4
         with:
           name: macos-bundles
-          path: release-assets/*.dmg
+          path: release-assets/*
           if-no-files-found: error
 
   windows:
@@ -114,18 +120,21 @@ jobs:
         run: git diff --exit-code -- gemini-web.lock
       - name: Verify vendored sidecar runtime contract
         run: node scripts/verify-sidecar-runtime.mjs
-      - name: Build unsigned NSIS installer
+      - name: Build unsigned NSIS installer and its update signature
         env:
           VERSION: ${{ inputs.version }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           mkdir -p release-assets
           npx tauri build --target x86_64-pc-windows-msvc --bundles nsis --config "{\"version\":\"$VERSION\"}"
           src=$(ls src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe)
           cp "$src" "release-assets/APODICTIC-$VERSION-windows-x86_64-setup.exe"
+          cp "$src.sig" "release-assets/APODICTIC-$VERSION-windows-x86_64-setup.exe.sig"
       - uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: release-assets/*.exe
+          path: release-assets/*
           if-no-files-found: error
 
   publish:
@@ -143,7 +152,10 @@ jobs:
           VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          (cd release-assets && sha256sum *.dmg *.exe > SHA256SUMS.txt)
+          (cd release-assets && sha256sum *.dmg *.exe *.app.tar.gz > SHA256SUMS.txt)
+          node scripts/write-update-manifest.mjs --version "$VERSION" --assets release-assets \
+            --base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/desktop-v$VERSION" \
+            --out latest.json
           engine=$(node -p "JSON.parse(require('fs').readFileSync('gemini-web.lock', 'utf8')).tag")
           cat > release-notes.md <<EOF
           Alpha build of the APODICTIC desktop app (engine ${engine}) for macOS and Windows.
@@ -167,3 +179,10 @@ jobs:
           gh release create "desktop-v$VERSION" release-assets/* \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
             --title "APODICTIC desktop $VERSION" --notes-file release-notes.md
+          # Installed apps poll this fixed release for latest.json, so publishing moves them forward.
+          if ! gh release view desktop-updater --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create desktop-updater --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+              --title "APODICTIC desktop update feed" \
+              --notes "Update feed for installed APODICTIC desktop apps. Download installers from the desktop-v releases."
+          fi
+          gh release upload desktop-updater latest.json --repo "$GITHUB_REPOSITORY" --clobber
