@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { parse } from "yaml";
 import { ensureSyncPrDraft } from "../../scripts/ensure-sync-pr-draft.mjs";
 
 const repository = "anotherpanacea-eng/apodictic-tauri";
@@ -60,4 +65,53 @@ test("ambiguity, API failure, and identity disappearance refuse", () => {
 test("lookalike identities are ignored", () => {
   const receipt = ensureSyncPrDraft(repository, fake([pull({ head: { ref: "other", repo: { full_name: repository } } })]).runner);
   assert.equal(receipt.pr, null);
+});
+
+function readPinnedRelease(lockBytes, { outputEnv = true } = {}) {
+  const workflow = parse(fs.readFileSync(new URL("../../.github/workflows/sync-gemini-web.yml", import.meta.url), "utf8"));
+  const run = workflow.jobs.sync.steps.find((step) => step.id === "lock").run;
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "tauri-sync-lock-"));
+  try {
+    if (lockBytes !== undefined) fs.writeFileSync(path.join(cwd, "gemini-web.lock"), lockBytes);
+    const output = path.join(cwd, "output.txt");
+    fs.writeFileSync(output, "existing=retained\n");
+    const env = { ...process.env, GITHUB_OUTPUT: output.replaceAll("\\", "/") };
+    if (!outputEnv) delete env.GITHUB_OUTPUT;
+    const result = spawnSync(process.env.BASH || "bash", ["--noprofile", "--norc", "-eo", "pipefail", "-c", run], { cwd, env, encoding: "utf8" });
+    assert.equal(result.error, undefined, "workflow bash must be available");
+    return { ...result, output: fs.readFileSync(output, "utf8") };
+  } finally {
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+}
+
+test("sync lock step emits the pinned JSON release fields", () => {
+  const result = readPinnedRelease(JSON.stringify({ tag: " v0.3.4-rc+build ", web_version: " 0.3.4 " }));
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.output, "existing=retained\ntag=v0.3.4-rc+build\nweb=0.3.4\n");
+});
+
+for (const [name, lockBytes] of [["missing", undefined], ["malformed", "{invalid"], ["null", "null"]]) {
+  test(`sync lock step rejects ${name} JSON without appending output`, () => {
+    const result = readPinnedRelease(lockBytes);
+    assert.notEqual(result.status, 0);
+    assert.equal(result.output, "existing=retained\n");
+  });
+}
+
+for (const field of ["tag", "web_version"]) {
+  for (const value of [undefined, null, 42, {}, "", "   ", "v0.3.4\ninjected=value", "v0.3.4\rinjected=value"]) {
+    test(`sync lock step rejects invalid ${field} ${JSON.stringify(value)} before either output`, () => {
+      const lock = { tag: "v0.3.4", web_version: "0.3.4", [field]: value };
+      const result = readPinnedRelease(JSON.stringify(lock));
+      assert.notEqual(result.status, 0);
+      assert.equal(result.output, "existing=retained\n");
+    });
+  }
+}
+
+test("sync lock step fails when its output destination is missing", () => {
+  const result = readPinnedRelease(JSON.stringify({ tag: "v0.3.4", web_version: "0.3.4" }), { outputEnv: false });
+  assert.notEqual(result.status, 0);
+  assert.equal(result.output, "existing=retained\n");
 });
