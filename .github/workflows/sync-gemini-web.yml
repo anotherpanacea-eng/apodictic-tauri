@@ -38,16 +38,10 @@ jobs:
           node -e '
             const fs = require("node:fs");
             const lock = JSON.parse(fs.readFileSync("gemini-web.lock", "utf8"));
-            const lines = [];
-            for (const [output, field] of [["tag", "tag"], ["web", "web_version"]]) {
-              const value = lock?.[field];
-              if (typeof value !== "string" || !value.trim() || /[\r\n]/.test(value)) {
-                throw new Error(`gemini-web.lock field "${field}" must be a nonempty single-line string`);
-              }
-              lines.push(`${output}=${value.trim()}`);
+            for (const field of ["tag", "web_version"]) {
+              if (typeof lock?.[field] !== "string" || !/^\S+$/.test(lock[field])) throw new Error(`gemini-web.lock: invalid ${field}`);
             }
-            if (!process.env.GITHUB_OUTPUT) throw new Error("GITHUB_OUTPUT is not set");
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, lines.join("\n") + "\n");
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `tag=${lock.tag}\nweb=${lock.web_version}\n`);
           '
       - name: Ensure sync PR is draft and unarmed before update
         env:
