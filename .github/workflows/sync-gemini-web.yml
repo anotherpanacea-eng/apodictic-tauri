@@ -35,8 +35,14 @@ jobs:
       - name: Read pinned release
         id: lock
         run: |
-          echo "tag=$(node -p "require('./gemini-web.lock').tag")" >> "$GITHUB_OUTPUT"
-          echo "web=$(node -p "require('./gemini-web.lock').web_version")" >> "$GITHUB_OUTPUT"
+          node -e '
+            const fs = require("node:fs");
+            const lock = JSON.parse(fs.readFileSync("gemini-web.lock", "utf8"));
+            for (const field of ["tag", "web_version"]) {
+              if (typeof lock?.[field] !== "string" || !/^\S+$/.test(lock[field])) throw new Error(`gemini-web.lock: invalid ${field}`);
+            }
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `tag=${lock.tag}\nweb=${lock.web_version}\n`);
+          '
       - name: Ensure sync PR is draft and unarmed before update
         env:
           GH_TOKEN: ${{ github.token }}
