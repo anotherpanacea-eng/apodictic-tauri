@@ -1,6 +1,6 @@
 # Spec — apodictic-tauri: architecture & extraction
 
-**Status:** DECISION-COMPLETE for the extraction + vendor boundary; provider/local-LLM is a phased roadmap.
+**Status:** extraction and payload consumer implemented in source; native build/security and distribution qualification remain separate gates. Provider/local-LLM remains a phased roadmap.
 **Date:** 2026-06-19. **Author:** Opus (Code-Mac).
 **Spec review:** independent subagent, 2026-06-19 — initial verdict NEEDS-REVISION (3 blocking: B1 release-asset
 vs tarball transport, B2 Gemini has no release pipeline + Windows-sidecar gap, B3 dev-mode contradiction);
@@ -9,6 +9,31 @@ all folded into §3/§5/§9 as decided design. Re-derived verdict: **CLEAR-TO-BU
 **Authoritative copy:** this in-repo file (`docs/architecture.md`) is authoritative; the fleet hub
 (`Cowork/repo-fleet/specs/apodictic-tauri-architecture.md`) carries a pointer (per the fleet "authoritative
 spec in-repo, pointer in hub" pattern).
+
+## Current source snapshot — reconciled 2026-10-04
+
+This reconciliation checks Tauri main `0dcc13f185867eb4d17e413a9762469eebb3789f`
+and Gemini main `38c463264ddc7748110eea3d92e589496424a934`. The June 19
+baseline and design rationale below remain historical evidence; they are not a
+fresh runtime report. No native build, keychain operation, installer, updater
+installation, provider call or release dispatch was performed for this update.
+
+The extracted shell and consumer are implemented. `gemini-web.lock` is pinned to
+Gemini `v0.3.4`, commit `38c5cc054ea8a90207287faba2524bc825555393`, with the v2
+tree-hash schema and Apple Silicon, Intel Mac and Windows sidecar inputs.
+Gemini's `release-desktop-payload.yml` has native Windows and macOS build/runtime
+verification steps; configured steps do not prove a particular run passed.
+Gemini's `src-tauri/` removal landed in `d0b4abd67dc1d094c42b083d8f2032e7f6cdcd1d`.
+Retained sidecar builders and frontend Tauri adapters support the producer and
+shared frontend, and are not an unfinished shell extraction.
+
+The Tauri alpha workflow has macOS and Windows assembly paths. The updater's
+GitHub release endpoint and public key are configured, and Rust implements a
+check followed by user consent before installation. Native packaging/security,
+signing identity/custody and actual update-install qualification remain separate.
+The [macOS packaging probe](macos-packaging-probe-spec.md) still emits **M0 NO-GO**
+and grants no distribution clearance. Current contributor process is governed by
+[AGENTS.md](../AGENTS.md), including docs PRs and draft-first integration trains.
 
 ---
 
@@ -26,7 +51,7 @@ engine (the sidecar/server)**, never in the Tauri command layer.
 
 ---
 
-## 1. Current state (grounded, as of `APODICTIC-Gemini` HEAD 2026-06-19)
+## 1. Historical baseline (grounded at Gemini HEAD 2026-06-19)
 
 There is already a real, coupled Tauri 2 build living inside `APODICTIC-Gemini`. This is an **extraction**,
 not a greenfield scaffold.
@@ -156,11 +181,7 @@ point both `frontendDist` and the `resources` plugin/dist entry at the same vend
 double-bundle.
 
 **Sidecar vendoring (decided — was §9-A):** vendor Gemini's **pre-built** per-target sidecar binaries
-(Gemini already builds them via `build-sidecar.mjs`). Caveat (S3): on macOS the sidecar binary is **signed +
-notarized downstream at `tauri build` time in _this_ repo**, so the shipped bytes ≠ the vendored bytes; the
-per-component/per-target hashes therefore attest the **unsigned input** only, and a verification checkbox
-is needed that Gatekeeper accepts a notarized outer app spawning the separately-signed `externalBin`
-(§7, §8). Vendoring server *source* + building the sidecar in Tauri CI is rejected — it re-introduces the
+(Gemini builds them via `build-sidecar.mjs`; the current lock includes all three targets). Historical production caveat (S3): signing/notarization can change the sidecar bytes downstream, so the lock attests vendored inputs, not final signed bundles. Acceptance of a notarized outer app spawning a separately signed `externalBin` requires its own proof (§7, §8). The current alpha workflow does not establish that qualification. Vendoring server *source* + building the sidecar in Tauri CI is rejected — it re-introduces the
 build dependency the split is meant to remove.
 
 ---
@@ -208,64 +229,69 @@ evidence packets you choose to a stronger model"* — not "runs locally and is j
 
 ---
 
-## 5. Migration plan (safe sequencing)
+## 5. Migration status (reconciled 2026-10-04)
 
-Order matters: **never break Gemini's desktop build before the new repo builds.**
+The original June 19 plan sequenced skeleton, producer, extraction, then destructive
+Gemini removal. Current source has advanced through those code changes:
 
-- **Increment 0 — Spec + spec review.** This doc. (docs-only, no PR.)
-- **Increment 1 — Stand up `apodictic-tauri` skeleton (additive, non-destructive).**
-  Clone; fleet files (`AGENTS.md`, `CLAUDE.md`, `README.md`, `.gitignore`, CI, in-repo `docs/architecture.md`);
-  vendor scaffolding (`gemini-web.lock` placeholder, `scripts/sync-gemini-web.mjs`, drift gate,
-  `sync-gemini-web.yml`, `vendor/gemini-web/` layout). No Gemini changes.
-- **Increment 2 — Gemini producer pipeline (additive, but larger than it sounds — B2).** Gemini has **no
-  release pipeline today** (its only workflow is the *consumer* `sync-apodictic-plugin.yml`); this increment
-  **creates Gemini's first `v*` tagged-release workflow** that builds `dist`, builds the sidecars, assembles
-  the payload archive + `payload-manifest.json`, and uploads it as a release asset. **Windows constraint:**
-  the Windows sidecar has **never been built and cannot be cross-compiled** (`windows-desktop.md:50`, only
-  the two macOS arches exist on disk), so a complete tri-target payload needs a **Windows CI runner that
-  does not exist yet**. **Decision: v1 payload is macOS-only** (`aarch64`+`x86_64-apple-darwin`); Windows is
-  gated behind standing up a Windows runner (tracked, not blocking the macOS path). Gemini's existing local
-  desktop build keeps working throughout. *Code change → Codex gate.*
-- **Increment 3 — Extract the shell into `apodictic-tauri`.** Copy `src-tauri/` (rename the Cargo crate off
-  the generic `app` — N2) + desktop scripts + `windows-desktop.md`; re-point `tauri.conf.json` at
-  `vendor/gemini-web/`; vendor a real (macOS) payload; **prove a local macOS `tauri build`** (the proof is
-  macOS-only per the Windows constraint above — S4). Re-verify the keychain→Stronghold→DEK chain survives
-  (§8) and that `capabilities/default.json` still authorizes the shell usage `lib.rs`/the sidecar actually
-  make (N4 — the allowlist currently looks thinner than the code's shell use). *Code change → review + CI.*
-- **Increment 4 — Gemini removal (destructive, LAST).** Remove `src-tauri/`, `desktop:*` scripts, Tauri
-  deps, `windows-desktop.md` from Gemini once the Tauri repo builds. *Code change → Codex gate; do NOT merge
-  until Tauri proves out + operator says so.*
+| Original increment | Current source disposition | Remaining evidence or boundary |
+|---|---|---|
+| 0 — Spec/review | Historical reviewed extraction design retained here. | This reconciliation has independent scope and build review; it grants no release operation. |
+| 1 — Skeleton/consumer | Landed shell, vendor synchronizer, lock and drift checks; the lock is pinned, not bootstrap. | A lock records input identities, not proof that a local machine has staged or run them. |
+| 2 — Gemini producer | `release-desktop-payload.yml` builds frontend and native Windows/macOS sidecars, verifies runtime contracts and assembles release assets. | A successful exact-run receipt is separate from configured workflow steps. |
+| 3 — Shell extraction | Tauri owns `src-tauri/`; its config uses vendored frontend/sidecar/resources and separate Gemini dev server. | Local macOS build proof, keychain/Stronghold/DEK and capability requalification are not established by this documentation. |
+| 4 — Gemini removal | Already landed in Gemini `d0b4abd67dc1d094c42b083d8f2032e7f6cdcd1d`; current Gemini has no `src-tauri/`. | Retained sidecar build scripts and frontend Tauri adapters are deliberate shared-engine/producer support. No further removal is authorized. |
 
-**This turn delivers Increment 0 + Increment 1** (and as much of the scaffolding as is verifiable without a
-Rust/Tauri toolchain). Increments 2–4 follow as their own gated PRs.
+The Windows runner gap from the historical plan is closed in source: the producer
+uses `windows-latest`, and Tauri's `release-alpha.yml` has a Windows NSIS job.
+The alpha workflow publishes only from `main`; a branch dispatch builds without
+publication. This is a description of configured behavior, not a dispatch request.
+Windows Authenticode and Mac Developer ID/notarization remain separate signing
+qualifications. The updater signatures serve a different purpose (§7).
+
+Forward native-provider work remains scoped by
+[the curated local-model boundary](hugging-face-native-install-boundary-spec.md)
+and [the Apple Intelligence spike](apple-intelligence-native-bridge-spike-spec.md).
+Their own preconditions and synthetic/public-data restrictions still apply.
 
 ---
 
-## 6. Fleet-repo setup (`apodictic-tauri` becomes fleet member #5)
+## 6. Fleet-repo ownership and delivery
 
-- **Role:** consumer · private · Rust + TS. Fleet grows from four repos to five.
-- **`AGENTS.md`** — the fleet workflow standard (spec→review→write→review→fix→merge; **merge commits, never
-  squash**; Codex 5.5 is the PR review step, don't merge out from under it; version bumps at merge), plus a
-  cross-repo context block naming its dependency contract: *consumes `APODICTIC-Gemini` desktop payload via
-  `gemini-web.lock`, drift-gated by `sync-gemini-web.mjs --check`; don't hand-edit the lock or vendored
-  payload — run the sync script.* Note `protect-public-only` ⇒ this private repo needs no branch protection.
-- **`CLAUDE.md`** — thin pointer to `AGENTS.md` (fleet convention).
-- **`README.md`** — what the app is, how to dev/build, the vendor relationship.
-- **CI** — Rust build/clippy + the `sync-gemini-web.mjs --check` drift gate + `tauri build` smoke (where a
-  runner is available). Mirror the green-on-Linux posture; gate `tauri build` to the matrix that can run it.
+The June 19 setup made Tauri fleet member #5; the current fleet has six repositories.
+Tauri remains a private Rust/TS consumer of Gemini desktop payloads, with an in-repo
+architecture contract and a pointer in the local hub. `AGENTS.md` governs contributors;
+`CLAUDE.md` points to it. The shell owns native lifecycle and credentials, while
+provider/editorial semantics remain in Gemini/apodictic.
+
+The current [draft-first integration contract](draft-first-integration-trains-spec.md)
+is built. Ordinary drafts stay unarmed; the singleton macOS validation job runs only
+for an eligible promoted same-repository train or explicit standalone exception.
+Weekly sync keeps automated payload bumps draft. This reconciles the original
+setup's per-change workflow description; source configuration is not a fresh CI receipt.
 
 ---
 
-## 7. Signing / notarization / updater (new release-eng ground)
+## 7. Signing, notarization and updater status
 
-No other fleet repo ships a signed desktop binary — this is genuinely new and is the real new cost GPT
-flagged. Plan early:
-- **macOS:** Apple Developer ID app + installer signing + notarization (hardened runtime). Needs the
-  operator's Developer ID cert in CI secrets.
-- **Windows:** Authenticode cert (the existing `windows-desktop.md` already notes this).
-- **Updater:** Tauri's updater requires **signed** update artifacts + an update manifest endpoint + a
-  signing keypair. Decide the endpoint (GitHub Releases-backed is simplest for a private app) before
-  shipping v1. Until then, manual install/update is acceptable.
+The updater endpoint choice is configured in `src-tauri/tauri.conf.json`: GitHub's
+`desktop-updater` release provides `latest.json`, with a committed updater public
+key. Rust's `check_for_update` checks the feed and asks for consent before stopping
+the sidecar, downloading/installing the update and restarting. Configuration and
+source implementation do not qualify an actual installed-app update or signing-key
+custody; no private key was inspected for this reconciliation.
+
+`.github/workflows/release-alpha.yml` uses the updater signing secrets for update
+archives/signatures and publishes the feed after a successful main-branch build.
+The macOS alpha path uses ad-hoc signing (`APPLE_SIGNING_IDENTITY=-`); the Windows
+NSIS path is without Authenticode. These updater signatures are distinct from
+Apple Developer ID, notarization and Windows code-signing identities.
+
+The existing M0 record and [packaging probe contract](macos-packaging-probe-spec.md)
+keep distribution qualification separate: licenses/redistribution, notices/SBOM,
+security/CSP/local authority, clean installation, signing and updater custody must
+not be treated as cleared merely because a workflow or public key exists. This
+snapshot establishes no new distribution or installation pass.
 
 ---
 
@@ -284,29 +310,32 @@ flagged. Plan early:
 ## 9. Decisions
 
 **Decided (post spec-review):**
-- **A. Sidecar vendoring** → pre-built per-target binaries, macOS-only for v1. Settled in §3.
+- **A. Sidecar vendoring** → pre-built per-target binaries; the current pin includes two macOS targets and Windows x86_64. The original macOS-only bootstrap boundary is historical (§5).
 - **C. Dev-mode source** → `desktop:dev` keeps `devUrl: http://localhost:3000` and the developer runs
   Gemini's `npm run dev` **separately** (the Tauri repo has no Gemini source to build, and `lib.rs` debug
-  mode already skips the sidecar and expects Vite at :3000 — `lib.rs:43-46`). **`beforeDevCommand` is
+  mode already skips the sidecar and expects Vite at :3000). **`beforeDevCommand` is
   dropped**, and the README/AGENTS must state the "run Gemini dev server first" prerequisite explicitly so
   `tauri dev` isn't pointed at a dead `:3000`. The vendored payload is for `tauri build` only. This resolves
   the §3-vs-§9 contradiction the spec review (B3) flagged.
 
-**Still open (for the operator — do not block the extraction):**
-- **B. Updater endpoint + signing identities:** GitHub-Releases-backed updater vs. self-hosted; provide the
-  Apple Developer ID (+ later Windows Authenticode) certs when ready. *Blocks a shippable signed v1, not the
-  extraction or the macOS dev/build.*
-- **E. Windows target:** *Unsigned alpha builds added 2026-09-28.* Gemini's `release-desktop-payload.yml` builds
-  and runtime-verifies the Windows sidecar on `windows-latest`, and `release-alpha.yml` builds an unsigned
-  NSIS installer there. Still open: an Authenticode certificate for a signed installer.
+**Current dispositions (source configuration versus qualification):**
+- **B. Updater endpoint:** GitHub release endpoint and public key are configured (§7). Actual update-install qualification, key custody, Apple Developer ID/notarization and Windows Authenticode remain separate; their availability was not inspected here.
+- **E. Windows target:** native producer/runtime-verification steps and an unsigned NSIS alpha workflow are implemented. This source snapshot proves no actual Windows build/install run; Authenticode qualification remains separate.
 - **D. SETEC local path:** the apodictic-plugin is already bundled. A local SETEC path (for the deterministic
   substrate tier offline) is future, via the provider/substrate tiering — out of scope for the extraction.
 
 ---
 
-## 10. Tracking
+## 10. Tracking and contributor process
 
-- Fleet board: `repo-fleet/TODO.md` → "Deferred product follow-ups" Tauri entry (updated 2026-06-19) +
-  this spec. Promote to the active section when Increment 2 starts.
-- Build increments are PRs through the fleet gate; **docs-only changes need no PR.** Don't merge without
-  operator instruction (Codex gate).
+The live Fleet issues and issue-self-checkout worker govern current ownership;
+dated hub board snapshots are context. This reconciliation is tracked by
+[Fleet #390](https://github.com/anotherpanacea-eng/fleet-coordination/issues/390).
+Keychain repair (#230) and unused-workflow removal (#383) have separate owners and
+are not part of this documentation change.
+
+Follow [AGENTS.md](../AGENTS.md): every change, including docs, uses a PR with
+independent review. Ordinary constituents stay draft and CI-unarmed; exact reviewed
+heads enter a periodic integration train. Promotion/landing requires the separate
+generic, Fleet and CI lanes with exact receipts. This document authorizes no
+workflow dispatch, hosted minutes, release, native-provider run or merge.
