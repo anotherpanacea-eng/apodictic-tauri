@@ -46,7 +46,7 @@ test("concurrency revokes canonically and isolates all label noise", () => {
 
 test("workflow inventory and stable cost topology are closed", () => {
   const names = fs.readdirSync(workflowDir).filter((name) => /\.ya?ml$/i.test(name)).sort();
-  assert.deepEqual(names, ["ci.yml", "claude.yml", "release-alpha.yml", "sync-gemini-web.yml"]);
+  assert.deepEqual(names, ["ci.yml", "release-alpha.yml", "sync-gemini-web.yml"]);
   const ci = load("ci.yml");
   for (const workflow of [ci, load("sync-gemini-web.yml"), load("release-alpha.yml")]) {
     for (const candidate of Object.values(workflow.jobs)) {
