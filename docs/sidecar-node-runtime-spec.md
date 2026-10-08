@@ -74,7 +74,12 @@ server/index.cjs                        esbuild CJS bundle (new tree)
 - `node_version: "<x.y.z>"`
 - `server_sha256`: canonical `apodictic-tree-sha256-v2` hash of `server/`
 
-`gemini-web.lock` records the same three fields, which the consumer computes from bytes.
+`gemini-web.lock` records the same three fields. The consumer recomputes `server_sha256`
+from bytes; `sidecar_layout` and `node_version` are validated producer declarations, not
+values derived by hashing. Require the exact layout marker and a full `24.x.y` release version
+(D1), and compare the host runtime's `--version` to that declaration in the runtime verifier.
+Other targets' versions are supported by the producer's reviewed download pin and binary hashes;
+do not claim that the consumer executed a foreign-target runtime.
 `scripts/lib/canonical-tree-hash.mjs` is unchanged in both repos.
 
 ### 2.2 Node runtime pin (producer)
@@ -89,15 +94,32 @@ target, the nodejs.org dist path and its SHA-256 copied from that release's `SHA
 | `x86_64-pc-windows-msvc.exe` | `win-x64/node.exe` | the file itself |
 | `x86_64-unknown-linux-gnu` | `node-v<V>-linux-x64.tar.gz` | `bin/node` (CI only) |
 
-The build downloads each file, refuses a hash mismatch, extracts with `tar` (no zip handling is
-needed because Windows uses the standalone `node.exe`), and copies the binary to
-`sidecar-bin/app-sidecar-<triple>`. The pin is committed, so a build never trusts a
-fetched checksum file. Any host can build every target.
+The build downloads every requested file into temporary staging, verifies all download hashes,
+then extracts the exact versioned `bin/node` member with `tar` (Windows uses the standalone
+`node.exe`). Preserve executable permissions for Unix binaries. Only after every requested
+download verifies does it write the bundle and runtimes to `sidecar-bin/`; a download/hash failure must not
+replace an existing output. Any host can assemble every target without executing foreign binaries.
+
+For Unix targets the published checksum is the **archive** hash, not the extracted binary hash.
+`sidecars[].sha256` is computed from the extracted binary and separately checked through staging,
+sync and bundling. Only the Windows standalone binary's hash directly equals its published
+`win-x64/node.exe` checksum. Node upgrades replace the version, download paths and all download
+hashes together; they are not a one-line pin update.
+
+Ship the full `LICENSE` file from that exact Node release, including its bundled third-party
+notices, under `server/notices/node-LICENSE.txt`. For standalone Windows downloads fetch the
+same release's license as well. Retain applicable notices for the esbuild-inlined npm packages
+under `server/notices/`; esbuild's legal-comment output alone is not a complete notice inventory.
+This directory travels inside the existing hashed `server/` resource tree. See the official
+[Node license](https://github.com/nodejs/node/blob/v24.10.0/LICENSE) and
+[checksum list](https://nodejs.org/dist/v24.10.0/SHASUMS256.txt) for examples, not the final pin.
 
 ### 2.3 Spawn contract (consumer)
 
 `start_sidecar` resolves `<resource_dir>/server/index.cjs` and fails with a startup error if it
-is missing. It passes that path as the only argument and adds `NODE_OPTIONS=""` to the existing
+is missing or is not a regular file. Resource-directory resolution must return an error rather
+than using the existing `./public` fallback for this executable script. It passes the absolute
+path as one argument (including when it contains spaces) and adds `NODE_OPTIONS=""` to the existing
 four environment variables, so a user-level `NODE_OPTIONS` cannot preload code into the engine.
 The health gate, port, redirect and kill-on-update paths are unchanged. The process name stays
 `app-sidecar`.
@@ -123,12 +145,19 @@ Touches:
   list at `:198`; extend the staged-versus-source hash check at `:186-193` to `server/`.
 - `scripts/verify-sidecar-runtime.mjs`: resolve the bundle beside the binary
   (`sidecar-bin/server/index.cjs` or `vendor/gemini-web/server/index.cjs`) and pass it as the
-  spawn argument in both spawns. Keep this file byte-identical with the consumer copy.
+  spawn argument in both spawns; verify host `--version` against the declared pin first.
+  The producer switches in Increment 1; the legacy consumer copy remains unchanged until
+  Increment 2. After Increment 2 the copies are byte-identical again.
 - `.github/workflows/release-desktop-payload.yml`: the Windows job keeps building and verifying,
   now via the downloaded runtime (no step change beyond D2).
 - `package.json` / `package-lock.json`: drop `@yao-pkg/pkg` and `better-sqlite3`; regenerate the
   lockfile. Remove `--external:better-sqlite3` from `build-sidecar.mjs:81`.
 - `AGENTS.md` (`:192-194`, `:243-244`): replace "pkg'd sidecars" wording.
+
+Consumes: `server/index.ts`, the locked esbuild dependencies and the reviewed Node 24 download
+pin. Produces: `sidecar-bin/server/{index.cjs,notices/}`, per-target `app-sidecar-*`, and the
+release tar plus manifest with the three new fields from §2.1. Increment 2 consumes this exact
+layout; the existing consumer continues reading its older pinned release meanwhile.
 
 Release: tag a new Gemini minor version. The consumer stays pinned to `v0.3.4` until Increment 2.
 
@@ -157,6 +186,11 @@ Touches:
 - `vendor/gemini-web/README.md`, `AGENTS.md`, `README.md`, `docs/architecture.md` §3: describe
   the new layout and drop "pkg'd binaries" wording.
 
+Consumes: the Increment 1 tagged payload and manifest. Produces: the generated lock, vendored
+`server/` tree and a shell that supplies its absolute entrypoint path. The server resource hash
+includes the notice files. Runtime verification covers only the executing host target; Intel
+and Apple Silicon macOS qualification each requires that corresponding host.
+
 ### Increment 3: dropped by D2
 
 The owner chose to keep the Windows producer job (D2), so this increment is not built. The text
@@ -170,9 +204,9 @@ assembled payload. Windows runtime proof remains in `apodictic-tauri` `release-a
 ## 4. Acceptance tests
 
 1. Producer: `node scripts/build-sidecar.mjs all` on one macOS host, and again on one Windows
-   host, yields four `app-sidecar-*` files whose SHA-256 values equal the pins in
-   `node-runtime.json` (for `.tar.gz` targets, equal to the extracted `bin/node` from the
-   verified archive), plus an identical `server/index.cjs` on both hosts.
+   host, yields four `app-sidecar-*` files identical to the binary from each verified download
+   (archive hashes are checked before extraction), plus an identical `server/index.cjs` on both
+   hosts and complete Node/npm notice files in the payload. Unix binaries remain executable.
 2. Producer: a tampered pin (one hex digit changed) makes the build exit non-zero before any file
    is written to `sidecar-bin/`.
 3. Producer CI: `npm run desktop:build:sidecar:host` and `node scripts/verify-sidecar-runtime.mjs`
@@ -183,7 +217,9 @@ assembled payload. Windows runtime proof remains in `apodictic-tauri` `release-a
    changing one byte of `vendor/gemini-web/server/index.cjs` makes `--check` fail.
 6. Consumer: syncing a release whose manifest lacks `sidecar_layout` fails with a clear message.
 7. Consumer: `node scripts/verify-sidecar-runtime.mjs` passes on macOS and on Windows against the
-   vendored payload (both are already steps in `release-alpha.yml`).
+   vendored payload (both are already steps in `release-alpha.yml`), including exact host
+   `--version` agreement. The current macOS runner verifies only its own architecture, so run on
+   both Intel and Apple Silicon before claiming all three shipped targets are runtime-qualified.
 8. Consumer: `npm run packaging:probe` on a Mac produces a receipt; the copied-bundle test suite
    (`npm run test:packaging-probe`) includes and passes the new server-drift case.
 9. Manual, owner, both machines: install the alpha on Mac and PC, add a BYOK key, run one
@@ -191,6 +227,9 @@ assembled payload. Windows runtime proof remains in `apodictic-tauri` `release-a
    path and the SQLite file at `APP_DATA_PATH` survived the runtime swap).
 10. Manual: with `NODE_OPTIONS=--require /tmp/x.js` set in the user's shell, the packaged app
     starts and `/tmp/x.js` is not executed.
+11. Consumer startup: missing/non-file entrypoint and resource-resolution failure stop before
+    spawn; an installed path containing spaces runs correctly. Closing and updating the app
+    stop the same child process; no new shell or intermediate launcher owns its lifecycle.
 
 ## 5. Rollback
 
@@ -205,6 +244,12 @@ reads the new tag until Increment 2. If Increment 1 itself must be undone, rever
   any Node-based sidecar under the hardened runtime needs V8's JIT entitlements
   (`com.apple.security.cs.allow-jit`, likely also `allow-unsigned-executable-memory`; unverified),
   applied to `app-sidecar`.
+  Download/payload hashes describe bytes before signing. If Tauri signs the macOS sidecar,
+  its resulting bytes can change; signing qualification must verify the resulting code signature
+  and must not compare that signed artifact directly to the original Node/payload hash. The
+  current packaging probe's raw sidecar-hash comparison therefore needs native qualification
+  with official Node before acceptance test 8 can be claimed. This spec does not claim signed
+  distribution readiness.
 - Authenticode signing of the installer.
 - Moving off Node 24 (D1); Node SEA; Bun or Deno; porting server code to Rust.
 - Shipping npm, corepack or any Node tooling beside the single `node` binary.

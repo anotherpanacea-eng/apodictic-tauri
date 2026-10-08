@@ -21,7 +21,9 @@ The server has no native addons. `better-sqlite3` is listed in `package.json` bu
 
 ## Option 1: keep `@yao-pkg/pkg`
 
-It works today, and the release pipeline already runtime-verifies each binary on its own OS. The costs are:
+The release pipeline runtime-verifies Windows and the macOS runner's host architecture. It
+builds both macOS binaries, but the host-only verifier does not execute the other architecture.
+The costs are:
 
 - **Single-maintainer fork of an abandoned tool.** Each new Node major depends on the fork publishing patched base binaries through `@yao-pkg/pkg-fetch`. The Node binary you ship is built by a third party.
 - **Signing.** Tauri re-signs `externalBin` files on macOS (unverified for your config; the probe spec has not exercised Developer ID yet). pkg binaries carry an appended payload, and they have a long history of breaking or needing special handling under `codesign` and notarization (unverified for 6.21.0). Any Node-based sidecar under the hardened runtime also needs the JIT entitlements V8 uses. You will hit that with every option, but pkg adds a second unknown on top of it.
@@ -44,12 +46,12 @@ Ship `node` (or `node.exe`) from nodejs.org, renamed to `app-sidecar-<triple>`, 
 Why it is the easiest to keep running on both machines:
 
 - **No packager.** The build becomes: download a pinned Node release, check it against the official `SHASUMS256.txt`, copy it, and run the existing esbuild step. Nothing modifies the binary.
-- **Cross-target from one machine.** All three runtimes are plain downloads and the bundle is platform-neutral, so either your Mac or your PC can produce the full payload. Per-OS runtime verification still happens in `release-alpha.yml`, which already runs `verify-sidecar-runtime.mjs` on both macOS and Windows.
-- **Signing is the normal case.** The Node binary is an ordinary signed Mach-O or PE file. On macOS Tauri re-signs it like any other `externalBin`. On Windows it keeps the OpenJS Authenticode signature.
-- **Upgrades are a version string.** Moving to Node 24 or later is a one-line change, with no wait on a fork.
-- **Auditable lock.** The sidecar hash in `gemini-web.lock` will equal a hash the Node project publishes, so anyone can check it independently.
+- **Cross-target from one machine.** All three runtimes are plain downloads and the bundle is platform-neutral, so either your Mac or your PC can assemble the full payload. Runtime verification still happens on the executing macOS/Windows host; both macOS architectures need separate qualification before claiming all targets were exercised.
+- **Signing has fewer packaging unknowns.** Downloaded Node bytes require no injected application payload. Windows retains the download's signature if the executable is left unchanged. macOS signing and hardened-runtime operation still need native qualification; signing may change bytes, so the payload hash describes the downloaded binary before signing.
+- **Upgrades have no fork dependency.** Replace the pinned version, paths and download checksums together.
+- **Auditable downloads.** Node publishes the macOS archive hashes and the standalone Windows executable hash. The lock records the extracted binary hashes, which can be independently recomputed from verified archives; macOS binary hashes do not directly equal the published archive hashes.
 
-Costs: one more payload tree (`server/`) to hash and lock, a coordinated producer and consumer format change, and a Rust change to pass the script path. Because the sidecar becomes a general-purpose Node, the Rust shell should blank `NODE_OPTIONS` so a user-level environment variable cannot inject code. pkg and SEA binaries respond to that variable as well (unverified), so this also closes an existing gap.
+Costs: one more payload tree (`server/`) to hash and lock, a coordinated producer and consumer format change, and a Rust change to pass the script path. Ship the exact Node release's full license and bundled third-party notices, plus applicable npm-bundle notices, in that hashed resource tree. Because the sidecar becomes a general-purpose Node, the Rust shell should blank `NODE_OPTIONS` so that variable cannot preload code. Whether the old pkg/SEA startup honors the same variable remains unverified; no existing-gap claim depends on that assumption.
 
 ## Option 4: move engine work into Rust
 
@@ -59,10 +61,10 @@ The server is about 12,200 lines of TypeScript. It holds Express routing and aut
 
 Both cross-compile all targets from one host, which is attractive. Both run a different runtime from the Node server that the web build and the Vitest suite exercise. `node:sqlite` support and `child_process` details would need checking on each (unverified). You would be testing two runtimes to ship one engine. Rejected.
 
-## Owner questions
+## Owner decisions
 
-1. Node major for the desktop runtime: keep 22 (matches CI and Cloud Run; maintenance ends April 2027) or move to 24 LTS now (quieter `node:sqlite`, longer support)?
-2. Should the producer build all three targets on one Mac runner (saves Actions minutes) while Windows runtime proof stays in `apodictic-tauri`'s release and CI jobs? Or keep the Windows producer job purely as a verifier?
-3. Are you willing to ship the format change as a new Gemini minor tag, so the current `v0.3.4` pin keeps working until the bump PR?
+The owner selected Node 24 LTS, retaining the Windows producer build/verification job, and a
+new Gemini minor tag on 2026-10-08. The companion spec §7 is the decision record; this memo
+does not reopen those choices.
 
 Sources for the SEA details: [Node.js SEA docs v26.3.0](https://nodejs.org/api/single-executable-applications.html), [Node.js SEA docs v26.0.0 nightly](https://nodejs.org/download/nightly/v26.0.0-nightly2026022776215dc993/docs/api/single-executable-applications.html).
