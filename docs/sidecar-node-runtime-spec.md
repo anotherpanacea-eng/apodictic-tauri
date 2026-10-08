@@ -1,6 +1,6 @@
 # Spec: desktop sidecar as official Node runtime plus server bundle
 
-**Status:** DRAFT, awaiting owner decisions D1 to D3 and independent spec review. Not built.
+**Status:** DRAFT. Owner decisions D1 to D3 recorded 2026-10-08 (§7); awaiting independent spec review. Not built.
 **Date:** 2026-10-08.
 **Repos:** `APODICTIC-Gemini` (producer, Increment 1) and `apodictic-tauri` (consumer, Increment 2).
 **Grounded against:** `apodictic-tauri` `origin/main` 0dcc13f; `APODICTIC-Gemini` `origin/main` 38c4632.
@@ -157,7 +157,11 @@ Touches:
 - `vendor/gemini-web/README.md`, `AGENTS.md`, `README.md`, `docs/architecture.md` §3: describe
   the new layout and drop "pkg'd binaries" wording.
 
-### Increment 3 (optional, after D2): producer workflow simplification
+### Increment 3: dropped by D2
+
+The owner chose to keep the Windows producer job (D2), so this increment is not built. The text
+below is kept as the option it would have been.
+
 
 `APODICTIC-Gemini/.github/workflows/release-desktop-payload.yml`: build all targets on the macOS
 job, and either delete the Windows job or keep it as a verify-only job that downloads the
@@ -202,18 +206,21 @@ reads the new tag until Increment 2. If Increment 1 itself must be undone, rever
   (`com.apple.security.cs.allow-jit`, likely also `allow-unsigned-executable-memory`; unverified),
   applied to `app-sidecar`.
 - Authenticode signing of the installer.
-- Node major upgrade beyond the D1 choice; Node SEA; Bun or Deno; porting server code to Rust.
+- Moving off Node 24 (D1); Node SEA; Bun or Deno; porting server code to Rust.
 - Shipping npm, corepack or any Node tooling beside the single `node` binary.
 - Apple Silicon and Intel universal binaries.
 - Changes to the `openapi/*.yaml` routes, which already find no files in the packaged build.
 
-## 7. Owner decisions
+## 7. Owner decisions (recorded 2026-10-08)
 
-- **D1. Node major:** 22 (matches web CI and Cloud Run; maintenance ends April 2027) or 24 LTS.
-  The pin file makes either a one-line change.
-- **D2. Windows producer job:** keep, convert to verify-only, or delete (Increment 3).
-- **D3. Tag:** confirm a new Gemini minor tag for the format change, so the current pin keeps
-  working until the consumer bump lands.
+- **D1. Node major: 24 LTS.** `node-runtime.json` pins a Node 24 LTS release. The esbuild
+  `target` stays `node22` so the shared server bundle still runs on the web app's Node 22 runtime
+  (web CI and Cloud Run) until that side moves; acceptance tests 3 and 7 run under the pinned 24.
+  Check `node:sqlite` loads without a flag under the pinned release in those tests.
+- **D2. Windows producer job: keep.** It keeps building and verifying on Windows, now from the
+  downloaded runtime. Increment 3 is dropped.
+- **D3. Tag: approved.** Increment 1 ships as a new Gemini minor tag; the consumer stays pinned to
+  `v0.3.4` until Increment 2 bumps the lock.
 
 ## 8. Verification status of this spec
 
