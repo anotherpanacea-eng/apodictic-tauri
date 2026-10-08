@@ -1,6 +1,6 @@
 # Rust shell dependency ledger (CAM-14 slice 1)
 
-- Voicewright-free: yes. This ledger covers only the Rust crates in `src-tauri/`.
+- Scope: the Rust crates in `src-tauri/` only.
 - Date: 2026-10-08
 - Repo head: `f0bf2b6d78a0cb93c76120b32e1d00b6f73fb8e9` (origin/main at branch point)
 - Targets: `aarch64-apple-darwin`, `x86_64-apple-darwin`, `x86_64-pc-windows-msvc`. These are the
@@ -17,7 +17,7 @@
 All commands were run from `src-tauri/`. `Cargo.lock` was not changed.
 
 ```sh
-cargo deny --locked --color never check licenses advisories bans sources   # exit 5; output in cargo-deny-check-2026-10-08.txt
+cargo deny --locked --color never check licenses advisories bans sources   # exit 5 (advisories and licenses fail); rerun to see the raw output
 cargo deny --locked --format json check advisories licenses                 # same findings, structured
 cargo about generate --locked about.hbs -o ../docs/distribution/THIRD-PARTY-NOTICES-rust.md
 SOURCE_DATE_EPOCH=<head commit time> cargo cyclonedx --format json --spec-version 1.5 \
@@ -36,7 +36,7 @@ so the "latest stable" column uses the index.
 
 The first cargo-deny run did not report the yanked `core2`, because the local index cache was stale.
 After the cache refreshed, a rerun reported `warning[yanked]` for core2 and nothing else changed.
-The committed output is from that rerun. The sparse-index check also finds core2 0.4.0 as the only
+The findings below are from that rerun. The sparse-index check also finds core2 0.4.0 as the only
 yanked entry in the lockfile.
 
 ## Direct crates
