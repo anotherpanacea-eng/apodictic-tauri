@@ -182,14 +182,14 @@ compile-time-only fxhash, paste and core2. The trial was not built or tested.
 
 | # | Item | Ruling | Status |
 | --- | --- | --- | --- |
-| 1 | App license | Proprietary, all rights reserved | The owner asked for a recommendation before it is written into `Cargo.toml` and a LICENSE file. Pending. |
+| 1 | App license | Proprietary, all rights reserved (confirmed) | The LICENSE file and `Cargo.toml` change (`license-file`, `publish = false`) are on their own branch, `feat/cam14-license-20261008` (Fleet #461). `deny.toml` here ignores unpublished crates, so the app crate is no longer flagged once that branch lands. |
 | 2 | Lockfile refresh | Approved | Draft apodictic-tauri #32. RUSTSEC-2026-0097, -0194, -0195, -0081, -0075, -0080, -0100 and -0098 no longer appear. Not built locally; needs the train's build and test. |
-| 3 | reqwest 0.11 | Upgrade to 0.13 | Blocked: the change needs `src-tauri/src/lib.rs`, which Fleet #230 still holds. Until it lands, h2 and rustls-pemfile stay unresolved. |
+| 3 | reqwest 0.11 | Upgrade to 0.13 | Unblocked: Fleet #230 was released on the owner's instruction, with its keychain work preserved on `fix/keychain-noentry-20261004`. The upgrade is its own item. Until it lands, h2 and rustls-pemfile stay unresolved. |
 | 4 | option-ext (MPL-2.0) | Accepted | `deny.toml` exception for option-ext only. The four compile-time-only MPL-2.0 css crates also get exceptions, matching their "ok, not distributed" verdict above. |
 | 5 | Stronghold and bincode | Waived for the alpha | Waived. |
 | 6 | keyring 2.3.3 | Waived for the alpha | Waived. |
 | 7 | libsodium ISC notice | Regenerated notice | A cargo-about `clarify` entry cannot carry this text, because cargo-about only reads files in the crate or its own repository, and the ISC text exists only inside the bundled `LATEST.tar.gz`. It is carried verbatim in `about.hbs` instead, so it is regenerated with the notices. |
 | 8 | WebView2 loader terms | Claude researched | The Microsoft.Web.WebView2 SDK 1.0.3650.58 NuGet license is BSD-3-Clause style (© Microsoft Corporation). Binary redistribution requires its notice, which is now carried verbatim in `about.hbs`. With the default Windows bundle setting, the installer downloads Microsoft's runtime bootstrapper at install time, so the WebView2 runtime itself is not redistributed. For owner review. |
 
-After these rulings, `cargo deny check licenses` reports only the app's own empty license field.
+With these rulings and the license branch applied, `cargo deny check licenses` passes.
 
