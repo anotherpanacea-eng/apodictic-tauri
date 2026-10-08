@@ -45,13 +45,23 @@ release asset; this repo vendors it behind a lock + drift gate, mirroring the fl
 npm install
 npm run desktop:dev
 
-# Release build (macOS; pulls + verifies the vendored payload first):
-npm run sync:web          # pull the pinned Gemini desktop payload into vendor/gemini-web/
-npm run desktop:build     # tauri build against the vendored payload
+# Native build (pulls + verifies the vendored payload before tauri build):
+npm run desktop:build
 ```
 
-**v1 is macOS-only** (the Windows sidecar cannot be cross-compiled and needs a Windows CI
-runner — gated; see `docs/architecture.md` §5/§9-E).
+The committed payload lock pins Gemini **v0.3.4** with Apple Silicon Mac, Intel Mac,
+and Windows x86_64 sidecar inputs. Gemini's producer workflow builds the Windows
+sidecar on Windows; `.github/workflows/release-alpha.yml` contains native Windows
+NSIS and macOS alpha build paths. These are source/configuration facts, not a new
+successful-build or distribution qualification. See [current migration status](docs/architecture.md#5-migration-status-reconciled-2026-10-04).
+
+The alpha workflow uses macOS ad-hoc signing and an installer without Windows
+Authenticode, with separate updater artifact signatures. The shell's updater public
+key and GitHub `desktop-updater/latest.json` endpoint are configured; Rust checks
+for an update and asks before installation. Updater signatures do not establish
+Developer ID, notarization, Authenticode, clean-install or update-install qualification.
+The existing packaging probe retains **M0 NO-GO**; this documentation authorizes no
+build, release dispatch, distribution or updater change.
 
 ## macOS packaging probe
 
