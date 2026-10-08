@@ -1,7 +1,7 @@
 # Spec — apodictic-tauri: architecture & extraction
 
 **Status:** extraction and payload consumer implemented in source; native build/security and distribution qualification remain separate gates. Provider/local-LLM remains a phased roadmap.
-**Date:** 2026-06-19. **Author:** Opus (Code-Mac).
+**Date:** 2026-06-19 (reconciled 2026-10-04). **Author:** Opus (Code-Mac).
 **Spec review:** independent subagent, 2026-06-19 — initial verdict NEEDS-REVISION (3 blocking: B1 release-asset
 vs tarball transport, B2 Gemini has no release pipeline + Windows-sidecar gap, B3 dev-mode contradiction);
 all folded into §3/§5/§9 as decided design. Re-derived verdict: **CLEAR-TO-BUILD** for Increment 1.
@@ -174,7 +174,7 @@ GitHub _release assets_** (`/releases/.../assets`), not a tarball. Do **not** li
     is resolved in §9-C below, promoted to decided design.**
 
 **Runtime note (S1):** in a *packaged* build the shell redirects the webview to the sidecar at `:3001`
-(`lib.rs:142`) and the **sidecar** serves the SPA via `express.static` from `PUBLIC_RESOURCES_PATH/dist`
+(the `lib.rs` setup redirect) and the **sidecar** serves the SPA via `express.static` from `PUBLIC_RESOURCES_PATH/dist`
 (`server/index.ts:203,210`). So `dist/` is served *through* the sidecar's resource dir at runtime;
 `frontendDist` is still required for bundling + the brief pre-redirect window. Vendor `dist/` **once** and
 point both `frontendDist` and the `resources` plugin/dist entry at the same vendored copy — don't
@@ -331,7 +331,7 @@ snapshot establishes no new distribution or installation pass.
 The live Fleet issues and issue-self-checkout worker govern current ownership;
 dated hub board snapshots are context. This reconciliation is tracked by
 [Fleet #390](https://github.com/anotherpanacea-eng/fleet-coordination/issues/390).
-Keychain repair (#230) and unused-workflow removal (#383) have separate owners and
+Keychain repair ([Fleet #230](https://github.com/anotherpanacea-eng/fleet-coordination/issues/230)) and unused-workflow removal ([Fleet #383](https://github.com/anotherpanacea-eng/fleet-coordination/issues/383)) have separate owners and
 are not part of this documentation change.
 
 Follow [AGENTS.md](../AGENTS.md): every change, including docs, uses a PR with
