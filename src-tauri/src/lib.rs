@@ -30,25 +30,42 @@ fn is_expected_local_health(health: &SidecarHealth) -> bool {
         && health.bind_scope.as_deref() == Some("loopback")
 }
 
-/// Securely get an existing 32-byte B64 string from OS Keychain, or generate a high-entropy one.
+/// Retrieve the existing keychain secret, creating one only when the entry is absent.
 fn get_or_create_keychain_secret(
     service: &str,
     user: &str,
     length: usize,
 ) -> Result<String, String> {
-    let entry = Entry::new(service, user).map_err(|e| e.to_string())?;
-    match entry.get_password() {
-        Ok(pw) => Ok(pw),
-        Err(_) => {
-            // Cryptographically secure OS entropy — NOT fastrand (explicitly non-cryptographic).
-            // These bytes back the Stronghold vault key and the credential-encryption DEK, so a
-            // CSPRNG is required (Codex P1, 2026-06-19).
+    let entry = Entry::new(service, user)
+        .map_err(|_| "Failed to initialize keychain entry.".to_string())?;
+    resolve_keychain_secret(
+        entry.get_password(),
+        length,
+        |bytes| {
+            // These bytes back the Stronghold vault key and credential-encryption DEK.
+            rand::rngs::OsRng.fill_bytes(bytes);
+        },
+        |secret| entry.set_password(secret),
+    )
+}
+
+fn resolve_keychain_secret(
+    read_result: keyring::Result<String>,
+    length: usize,
+    fill_entropy: impl FnOnce(&mut [u8]),
+    store: impl FnOnce(&str) -> keyring::Result<()>,
+) -> Result<String, String> {
+    match read_result {
+        Ok(secret) => Ok(secret),
+        Err(keyring::Error::NoEntry) => {
             let mut random_bytes = vec![0u8; length];
-            rand::rngs::OsRng.fill_bytes(&mut random_bytes);
+            fill_entropy(&mut random_bytes);
             let secret = BASE64.encode(&random_bytes);
-            entry.set_password(&secret).map_err(|e| e.to_string())?;
+            store(&secret).map_err(|_| "Failed to store keychain secret.".to_string())?;
             Ok(secret)
         }
+        // Keyring errors can include credential data; never expose their payloads.
+        Err(_) => Err("Failed to read keychain secret.".to_string()),
     }
 }
 
@@ -264,7 +281,142 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_expected_local_health, SidecarHealth};
+    use super::{is_expected_local_health, resolve_keychain_secret, SidecarHealth, BASE64};
+    use base64::Engine as _;
+    use keyring::{credential::CredentialApi, mock::MockCredential, Entry, Error};
+    use std::cell::Cell;
+
+    fn read_errors() -> Vec<Error> {
+        let ambiguous = MockCredential::default();
+        ambiguous.set_password("ambiguous-secret-marker").unwrap();
+        vec![
+            Error::PlatformFailure(Box::new(std::io::Error::other("platform-secret-marker"))),
+            Error::NoStorageAccess(Box::new(std::io::Error::other("access-secret-marker"))),
+            Error::BadEncoding(b"encoding-secret-marker".to_vec()),
+            Error::TooLong("attribute-secret-marker".to_string(), 12),
+            Error::Invalid(
+                "invalid-secret-marker".to_string(),
+                "reason-secret-marker".to_string(),
+            ),
+            Error::Ambiguous(vec![Box::new(ambiguous)]),
+        ]
+    }
+
+    #[test]
+    fn existing_keychain_secret_is_returned_verbatim_without_effects() {
+        for secret in ["", "existing-secret-marker", "\0unusual\n非base64"] {
+            let entropy_calls = Cell::new(0);
+            let store_calls = Cell::new(0);
+            let result = resolve_keychain_secret(
+                Ok(secret.to_string()),
+                32,
+                |_| entropy_calls.set(entropy_calls.get() + 1),
+                |_| {
+                    store_calls.set(store_calls.get() + 1);
+                    Ok(())
+                },
+            );
+            assert_eq!(result.unwrap(), secret);
+            assert_eq!((entropy_calls.get(), store_calls.get()), (0, 0));
+        }
+    }
+
+    #[test]
+    fn missing_keychain_entry_generates_and_stores_once_at_requested_length() {
+        for length in [0, 1, 32] {
+            let entropy_calls = Cell::new(0);
+            let store_calls = Cell::new(0);
+            let expected = BASE64.encode(vec![0xa5; length]);
+            let result = resolve_keychain_secret(
+                Err(Error::NoEntry),
+                length,
+                |bytes| {
+                    entropy_calls.set(entropy_calls.get() + 1);
+                    assert_eq!(bytes.len(), length);
+                    bytes.fill(0xa5);
+                },
+                |secret| {
+                    store_calls.set(store_calls.get() + 1);
+                    assert_eq!(secret, expected);
+                    Ok(())
+                },
+            );
+            assert_eq!(result.unwrap(), expected);
+            assert_eq!((entropy_calls.get(), store_calls.get()), (1, 1));
+        }
+    }
+
+    #[test]
+    fn keychain_read_errors_refuse_creation_and_hide_payloads() {
+        for error in read_errors() {
+            let entropy_calls = Cell::new(0);
+            let store_calls = Cell::new(0);
+            let result = resolve_keychain_secret(
+                Err(error),
+                32,
+                |_| entropy_calls.set(entropy_calls.get() + 1),
+                |_| {
+                    store_calls.set(store_calls.get() + 1);
+                    Ok(())
+                },
+            );
+            assert_eq!((entropy_calls.get(), store_calls.get()), (0, 0));
+            assert_eq!(result.unwrap_err(), "Failed to read keychain secret.");
+        }
+    }
+
+    #[test]
+    fn keychain_store_failure_returns_sanitized_error_after_one_attempt() {
+        for error in read_errors().into_iter().chain([Error::NoEntry]) {
+            let entropy_calls = Cell::new(0);
+            let store_calls = Cell::new(0);
+            let result = resolve_keychain_secret(
+                Err(Error::NoEntry),
+                32,
+                |bytes| {
+                    entropy_calls.set(entropy_calls.get() + 1);
+                    bytes.fill(0xa5);
+                },
+                |secret| {
+                    store_calls.set(store_calls.get() + 1);
+                    assert_eq!(secret, BASE64.encode([0xa5; 32]));
+                    Err(error)
+                },
+            );
+            assert_eq!((entropy_calls.get(), store_calls.get()), (1, 1));
+            assert_eq!(result.unwrap_err(), "Failed to store keychain secret.");
+        }
+    }
+
+    #[test]
+    fn transient_keyring_read_error_preserves_existing_password() {
+        let entry = Entry::new_with_credential(Box::new(MockCredential::default()));
+        entry.set_password("existing-secret-marker").unwrap();
+        let credential = entry
+            .get_credential()
+            .downcast_ref::<MockCredential>()
+            .unwrap();
+        credential.set_error(Error::NoStorageAccess(Box::new(std::io::Error::other(
+            "transient-secret-marker",
+        ))));
+        let entropy_calls = Cell::new(0);
+        let store_calls = Cell::new(0);
+        let result = resolve_keychain_secret(
+            entry.get_password(),
+            32,
+            |bytes| {
+                entropy_calls.set(entropy_calls.get() + 1);
+                bytes.fill(0xa5);
+            },
+            |secret| {
+                store_calls.set(store_calls.get() + 1);
+                entry.set_password(secret)
+            },
+        );
+        assert_eq!(entry.get_password().unwrap(), "existing-secret-marker");
+        assert_eq!((entropy_calls.get(), store_calls.get()), (0, 0));
+        assert_eq!(result.unwrap_err(), "Failed to read keychain secret.");
+    }
 
     #[test]
     fn accepts_only_exact_local_loopback_health() {
