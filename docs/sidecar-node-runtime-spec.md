@@ -46,8 +46,10 @@ guessing.
   `PUBLIC_RESOURCES_PATH`, `APODICTIC_RUNTIME_MODE`, `CREDENTIAL_ENCRYPTION_KEY` and no arguments.
   `src-tauri/tauri.conf.json` bundles `externalBin: ../vendor/gemini-web/binaries/app-sidecar`
   and resources `dist` and `apodictic-plugin`.
-- **Runtime verifier (mirrored file).** `scripts/verify-sidecar-runtime.mjs:21-31,139,156` exists
-  in both repos and spawns the binary with no arguments.
+- **Runtime verifiers (repo-specific).** `scripts/verify-sidecar-runtime.mjs` exists in both
+  repos and spawns the binary twice with no arguments. The producer additionally requires
+  `dist/index.html`, sets `FRONTEND_DIST_PATH`, and checks local static responses; the consumer
+  copy does not currently contain those checks. They are not byte-identical at these heads.
 - **Packaging probe.** `apodictic-tauri/scripts/verify-macos-packaging-probe.mjs:165-189` checks
   `Contents/MacOS/app-sidecar` architecture and hash and the `dist`/`apodictic-plugin` tree hashes.
   Copied-bundle tests live in `scripts/tests/macos-packaging-probe.test.mjs:113-130`.
@@ -146,8 +148,8 @@ Touches:
 - `scripts/verify-sidecar-runtime.mjs`: resolve the bundle beside the binary
   (`sidecar-bin/server/index.cjs` or `vendor/gemini-web/server/index.cjs`) and pass it as the
   spawn argument in both spawns; verify host `--version` against the declared pin first.
-  The producer switches in Increment 1; the legacy consumer copy remains unchanged until
-  Increment 2. After Increment 2 the copies are byte-identical again.
+  Preserve its existing static-response checks. The producer switches in Increment 1;
+  the repo-specific legacy consumer verifier remains unchanged until Increment 2.
 - `.github/workflows/release-desktop-payload.yml`: the Windows job keeps building and verifying,
   now via the downloaded runtime (no step change beyond D2).
 - `package.json` / `package-lock.json`: drop `@yao-pkg/pkg` and `better-sqlite3`; regenerate the
@@ -177,7 +179,8 @@ Touches:
 - `src-tauri/src/lib.rs` (`start_sidecar`, `:76-98`): resolve the script path, fail closed when
   absent, `.args([script])`, `.env("NODE_OPTIONS", "")`. Add a unit test only if the path
   resolution is factored into a pure function that protects the fail-closed behavior.
-- `scripts/verify-sidecar-runtime.mjs`: the same change as in Increment 1, byte-identical.
+- `scripts/verify-sidecar-runtime.mjs`: update both spawns and host-version verification as
+  in Increment 1, preserving this repo's existing verifier paths and behavior.
 - `scripts/verify-macos-packaging-probe.mjs` (`:165-189`): require
   `Contents/Resources/server` and compare its tree hash to the lock's `server_sha256`.
 - `scripts/tests/macos-packaging-probe.test.mjs`: fixture stages `server/`; add a
@@ -269,8 +272,11 @@ reads the new tag until Increment 2. If Increment 1 itself must be undone, rever
 
 ## 8. Verification status of this spec
 
-The file and line references above were read from `origin/main`. Nothing was built: the npm
-registry was unreachable from the drafting sandbox, so the claim that the CJS bundle runs
-unchanged under a stock `node` is supported by reading the code (no non-builtin `require` beyond
-bundled packages, `node:sqlite` via `createRequire`) and is confirmed only by acceptance tests 3
-and 7.
+The drafting sandbox could not reach npm. During review, the producer at `38c4632` was copied
+to disposable scratch, its locked packages installed, and its unchanged esbuild options used
+to produce `server/index.cjs`. The frontend built with `npm run build`. A copy of the existing
+producer verifier, adapted only to pass that script path to its two spawns, passed against
+stock Windows Node `v24.16.0`: local health, static-response security checks, loopback-only
+exposure and invalid-mode refusal. This is a bundle compatibility smoke test; the new pin,
+download/notice assembly, payload sync, native Tauri packaging, macOS architectures, signing,
+credential reopen and updater behavior remain acceptance work for the implementation.
