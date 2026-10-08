@@ -1,0 +1,49 @@
+# cargo-deny config for the Rust crates the desktop shell ships (CAM-14 ledger).
+# Run from src-tauri/: cargo deny --locked check licenses advisories bans sources
+# Findings are recorded in docs/distribution/rust-shell-ledger-*.md. Nothing is
+# allowed here to make the check pass; waivers are owner decisions.
+
+[graph]
+# Release targets built by .github/workflows/release-alpha.yml.
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+]
+exclude-dev = true
+
+[advisories]
+# Defaults: vulnerabilities and unmaintained/unsound notices are errors.
+ignore = []
+
+[licenses]
+# Permissive licenses actually present in the target graphs as of 2026-10-08.
+# Not listed, so reported as findings: MPL-2.0 (weak copyleft), and the
+# workspace crate, whose Cargo.toml license field is empty.
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "0BSD",
+    "BSL-1.0",
+    "Unlicense",
+    "CC0-1.0",
+    "Unicode-3.0",
+]
+confidence-threshold = 0.8
+exceptions = []
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

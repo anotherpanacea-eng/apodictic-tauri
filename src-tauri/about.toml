@@ -1,0 +1,36 @@
+# cargo-about config for the Rust third-party notices (CAM-14 ledger).
+# Run from src-tauri/:
+#   cargo about generate --locked about.hbs -o ../docs/distribution/THIRD-PARTY-NOTICES-rust.md
+# `accepted` only controls which license texts are rendered into the notices
+# file. It is not a compliance decision: deny.toml is the license check, and
+# MPL-2.0 is accepted here only so the option-ext notice can be rendered. Its
+# use is an open owner decision in docs/distribution/rust-shell-ledger-*.md.
+
+# Release targets built by .github/workflows/release-alpha.yml.
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+]
+ignore-build-dependencies = true
+ignore-dev-dependencies = true
+private = { ignore = true }
+workarounds = ["ring"]
+
+accepted = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "0BSD",
+    "BSL-1.0",
+    "Unlicense",
+    "CC0-1.0",
+    "Unicode-3.0",
+    "MPL-2.0",
+    "OpenSSL",
+]
