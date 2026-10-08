@@ -18,8 +18,8 @@ ignore = []
 
 [licenses]
 # Permissive licenses actually present in the target graphs as of 2026-10-08.
-# Not listed, so reported as findings: MPL-2.0 (weak copyleft), and the
-# workspace crate, whose Cargo.toml license field is empty.
+# MPL-2.0 is not allowed in general; the owner accepted it for option-ext only
+# (2026-10-08). The workspace crate's empty license field is still reported.
 allow = [
     "MIT",
     "MIT-0",
@@ -36,7 +36,14 @@ allow = [
     "Unicode-3.0",
 ]
 confidence-threshold = 0.8
-exceptions = []
+exceptions = [
+    { allow = ["MPL-2.0"], crate = "option-ext" },
+    # Compile-time only (tauri-build/tauri-codegen via kuchikiki); never shipped.
+    { allow = ["MPL-2.0"], crate = "cssparser" },
+    { allow = ["MPL-2.0"], crate = "cssparser-macros" },
+    { allow = ["MPL-2.0"], crate = "dtoa-short" },
+    { allow = ["MPL-2.0"], crate = "selectors" },
+]
 
 [bans]
 multiple-versions = "warn"

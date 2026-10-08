@@ -3,8 +3,10 @@
 #   cargo about generate --locked about.hbs -o ../docs/distribution/THIRD-PARTY-NOTICES-rust.md
 # `accepted` only controls which license texts are rendered into the notices
 # file. It is not a compliance decision: deny.toml is the license check, and
-# MPL-2.0 is accepted here only so the option-ext notice can be rendered. Its
-# use is an open owner decision in docs/distribution/rust-shell-ledger-*.md.
+# MPL-2.0 is accepted here only so the option-ext notice can be rendered (the
+# owner accepted option-ext on 2026-10-08). Bundled native code whose license
+# text is not in its crate (libsodium, the WebView2 loader) is carried verbatim
+# in about.hbs, because cargo-about only reads files from the crate itself.
 
 # Release targets built by .github/workflows/release-alpha.yml.
 targets = [

@@ -10,7 +10,9 @@
   RustSec advisory-db at `550efd3d587a29b2e2c2b21b17a440da4fede999` (2026-10-08).
 - Out of scope: the Brysbaert resource's redistribution permission is a data-resource question, not a
   crate. The Node sidecar and frontend payload are also out of scope here.
-- Status: findings only. No waiver has been granted, and distribution remains M0 NO-GO.
+- Status: the tables below are the 2026-10-08 findings. The owner's rulings from the same day are
+  at the end, with the resulting status of each item. Distribution remains M0 NO-GO until the
+  app license and the reqwest upgrade land.
 
 ## Commands run
 
@@ -175,3 +177,19 @@ compile-time-only fxhash, paste and core2. The trial was not built or tested.
    ISC notice be carried: a cargo-about `clarify` entry, or a hand-maintained addendum?
 8. **WebView2 loader (Windows).** webview2-com-sys links Microsoft's vendored WebView2 loader. Will
    you obtain the Microsoft WebView2 SDK terms and decide how the Windows notice handles them?
+
+## Owner rulings (2026-10-08)
+
+| # | Item | Ruling | Status |
+| --- | --- | --- | --- |
+| 1 | App license | Proprietary, all rights reserved | The owner asked for a recommendation before it is written into `Cargo.toml` and a LICENSE file. Pending. |
+| 2 | Lockfile refresh | Approved | Draft apodictic-tauri #32. RUSTSEC-2026-0097, -0194, -0195, -0081, -0075, -0080, -0100 and -0098 no longer appear. Not built locally; needs the train's build and test. |
+| 3 | reqwest 0.11 | Upgrade to 0.13 | Blocked: the change needs `src-tauri/src/lib.rs`, which Fleet #230 still holds. Until it lands, h2 and rustls-pemfile stay unresolved. |
+| 4 | option-ext (MPL-2.0) | Accepted | `deny.toml` exception for option-ext only. The four compile-time-only MPL-2.0 css crates also get exceptions, matching their "ok, not distributed" verdict above. |
+| 5 | Stronghold and bincode | Waived for the alpha | Waived. |
+| 6 | keyring 2.3.3 | Waived for the alpha | Waived. |
+| 7 | libsodium ISC notice | Regenerated notice | A cargo-about `clarify` entry cannot carry this text, because cargo-about only reads files in the crate or its own repository, and the ISC text exists only inside the bundled `LATEST.tar.gz`. It is carried verbatim in `about.hbs` instead, so it is regenerated with the notices. |
+| 8 | WebView2 loader terms | Claude researched | The Microsoft.Web.WebView2 SDK 1.0.3650.58 NuGet license is BSD-3-Clause style (© Microsoft Corporation). Binary redistribution requires its notice, which is now carried verbatim in `about.hbs`. With the default Windows bundle setting, the installer downloads Microsoft's runtime bootstrapper at install time, so the WebView2 runtime itself is not redistributed. For owner review. |
+
+After these rulings, `cargo deny check licenses` reports only the app's own empty license field.
+
