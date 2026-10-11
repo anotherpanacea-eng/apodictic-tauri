@@ -1,0 +1,14 @@
+Copyright (c) 2025-2026 Joshua A. Miller, PhD. All rights reserved.
+
+The source code in this repository and the APODICTIC desktop application built
+from it are proprietary. No license is granted to use, copy, modify, or
+distribute them except as the copyright holder permits in writing.
+
+Exceptions:
+
+- The bundled APODICTIC plugin content (apodictic-plugin/, shipped inside the
+  web payload) remains under its own license, Creative Commons
+  Attribution-NonCommercial-ShareAlike 4.0 International, as stated in its own
+  LICENSE file.
+- Third-party components remain under their own licenses. See the third-party
+  notices under docs/distribution/.
