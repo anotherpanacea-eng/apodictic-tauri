@@ -330,6 +330,8 @@ async function doSync() {
     transit.push(`dist: manifest ${manifest.dist_sha256} != downloaded ${downloadedDist}`);
   if (manifest.plugin_sha256 && manifest.plugin_sha256 !== downloadedPlugin)
     transit.push(`plugin: manifest ${manifest.plugin_sha256} != downloaded ${downloadedPlugin}`);
+  if (manifest.server_sha256 !== computed.server_sha256)
+    transit.push(`server: manifest ${manifest.server_sha256} != downloaded ${computed.server_sha256}`);
   for (const { target, sha256: claimed } of manifest.sidecars || []) {
     if (!got.has(target)) transit.push(`sidecar ${target}: missing from payload`);
     else if (claimed && claimed !== got.get(target))
