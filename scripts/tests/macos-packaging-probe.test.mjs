@@ -113,6 +113,9 @@ function macBundleFixture(t) {
   fs.cpSync(path.join(staged, "server"), path.join(resources, "server"), { recursive: true, errorOnExist: true });
   const stagedSidecar = path.join(staged, "binaries", `app-sidecar-${host.targetTriple}`);
   for (const name of ["apodictic-tauri", "app-sidecar"]) { const target = path.join(macos, name); fs.copyFileSync(stagedSidecar, target); fs.chmodSync(target, 0o755); }
+  // The official Node sidecar carries the OpenJS Developer ID signature; ad-hoc sign the stand-in
+  // app executable so the fixture bundle looks like Tauri's unsigned build.
+  assert.equal(spawnSync("/usr/bin/codesign", ["--force", "--sign", "-", path.join(macos, "apodictic-tauri")]).status, 0);
   const version = JSON.parse(fs.readFileSync(path.join(repoRoot, "src-tauri", "tauri.conf.json"), "utf8")).version;
   const plist = `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n<key>CFBundleExecutable</key><string>apodictic-tauri</string>\n<key>CFBundleIdentifier</key><string>com.anotherpanacea.apodictic</string>\n<key>CFBundlePackageType</key><string>APPL</string>\n<key>CFBundleShortVersionString</key><string>${version}</string>\n<key>CFBundleVersion</key><string>${version}</string>\n<key>LSMinimumSystemVersion</key><string>14.0</string>\n</dict></plist>\n`;
   fs.writeFileSync(path.join(contents, "Info.plist"), plist);
