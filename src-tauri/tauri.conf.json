@@ -30,7 +30,8 @@
     ],
     "resources": {
       "../vendor/gemini-web/apodictic-plugin": "apodictic-plugin",
-      "../vendor/gemini-web/dist": "dist"
+      "../vendor/gemini-web/dist": "dist",
+      "../vendor/gemini-web/server": "server"
     },
     "targets": "all",
     "icon": [

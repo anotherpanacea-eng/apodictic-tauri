@@ -6,17 +6,17 @@
  * APODICTIC-Gemini's scripts/sync-plugin.mjs — but a different TRANSPORT, see below).
  *
  * Why not "just mirror sync-plugin.mjs": that script pulls a git TARBALL of a tag and vendors
- * committed source. The desktop payload's two biggest inputs — the built `dist/` and the pkg'd
- * `app-sidecar` binaries — are gitignored BUILD ARTIFACTS, absent from the tree at any tag. So
- * this script pulls a GitHub *release asset* (the producer's `desktop-payload-<ver>.tar.gz`),
- * not a tarball.
+ * committed source. The desktop payload's biggest inputs — the built `dist/`, the `app-sidecar`
+ * binaries (official Node) and the `server/` bundle they run — are gitignored BUILD ARTIFACTS,
+ * absent from the tree at any tag. So this script pulls a GitHub *release asset* (the producer's
+ * `desktop-payload-<ver>.tar.gz`), not a tarball.
  *
  * Producer contract (APODICTIC-Gemini release, created in migration Increment 2 — see
  * docs/architecture.md §5; NOT yet shipped as of repo founding):
  *   A `v*` release uploads:
- *     - desktop-payload-<web_version>.tar.gz   — tarball of { dist/, binaries/app-sidecar-<target>…, apodictic-plugin/ }
+ *     - desktop-payload-<web_version>.tar.gz   — tarball of { dist/, binaries/app-sidecar-<target>…, apodictic-plugin/, server/ }
  *     - payload-manifest.json                  — { web_version, plugin_version, commit,
- *                                                   dist_sha256, plugin_sha256,
+ *                                                   dist_sha256, plugin_sha256, server_sha256,
  *                                                   sidecars: [{ target, sha256 }] }
  *
  * Usage:
@@ -88,8 +88,8 @@ async function gh(urlPath) {
 
 /**
  * Verify the vendored payload against the lock by RECOMPUTING hashes from the bytes on disk
- * (dist/ + apodictic-plugin/ via hashTree, each sidecar via sha256File) — not by trusting the
- * manifest's self-reported values (S3). Offline; returns a list of problems.
+ * (dist/ + apodictic-plugin/ + server/ via hashTree, each sidecar via sha256File) — not by
+ * trusting the manifest's self-reported values (S3). Offline; returns a list of problems.
  */
 function verifyVendoredAgainstLock(lock) {
   const problems = [];
@@ -97,6 +97,7 @@ function verifyVendoredAgainstLock(lock) {
   const distDir = path.join(VENDOR, "dist");
   const binDir = path.join(VENDOR, "binaries");
   const pluginDir = path.join(VENDOR, "apodictic-plugin");
+  const serverDir = path.join(VENDOR, "server");
 
   if (!fs.existsSync(distDir)) {
     problems.push("vendor/gemini-web/dist/ missing — re-run `npm run sync:web`.");
@@ -110,6 +111,13 @@ function verifyVendoredAgainstLock(lock) {
   } else {
     const got = hashTree(pluginDir);
     if (got !== lock.plugin_sha256) problems.push(`plugin tree hash drift: ${got} != lock ${lock.plugin_sha256}`);
+  }
+
+  if (!fs.existsSync(serverDir)) {
+    problems.push("vendor/gemini-web/server/ missing — re-run `npm run sync:web`.");
+  } else {
+    const got = hashTree(serverDir);
+    if (got !== lock.server_sha256) problems.push(`server tree hash drift: ${got} != lock ${lock.server_sha256}`);
   }
 
   for (const { target, sha256 } of lock.sidecars || []) {
@@ -182,7 +190,7 @@ async function downloadAndExtractPayload(rel, destDir) {
   return { payloadAsset, manifest: JSON.parse(fs.readFileSync(path.join(destDir, "payload-manifest.json"), "utf8")) };
 }
 
-/** Recompute the payload's hashes FROM THE BYTES on disk (dist/plugin tree hashes + each sidecar). */
+/** Recompute the payload's hashes FROM THE BYTES on disk (dist/plugin/server tree hashes + each sidecar). */
 function computePayloadHashes(dir) {
   const sidecars = [];
   const binDir = path.join(dir, "binaries");
@@ -194,6 +202,7 @@ function computePayloadHashes(dir) {
   return {
     dist_sha256: hashTree(path.join(dir, "dist")),
     plugin_sha256: hashTree(path.join(dir, "apodictic-plugin")),
+    server_sha256: hashTree(path.join(dir, "server")),
     legacy_dist_sha256: legacyHashTree(path.join(dir, "dist")),
     legacy_plugin_sha256: legacyHashTree(path.join(dir, "apodictic-plugin")),
     sidecars,
@@ -207,6 +216,8 @@ function compareComputedToLock(lock, computed) {
     problems.push(`dist tree hash: lock ${lock.dist_sha256} != published payload ${computed.dist_sha256}`);
   if (computed.plugin_sha256 !== lock.plugin_sha256)
     problems.push(`plugin tree hash: lock ${lock.plugin_sha256} != published payload ${computed.plugin_sha256}`);
+  if (computed.server_sha256 !== lock.server_sha256)
+    problems.push(`server tree hash: lock ${lock.server_sha256} != published payload ${computed.server_sha256}`);
   const got = new Map(computed.sidecars.map((s) => [s.target, s.sha256]));
   for (const { target, sha256 } of lock.sidecars || []) {
     if (got.get(target) !== sha256)
@@ -294,7 +305,7 @@ async function doSync() {
   const rel = await selectedRelease();
   // Clear only the gitignored payload contents, NOT the whole dir — vendor/gemini-web/README.md is
   // a committed file (explains the dir); a wholesale rmSync(VENDOR) would delete it on every sync.
-  for (const p of ["dist", "binaries", "apodictic-plugin", "payload-manifest.json"]) {
+  for (const p of ["dist", "binaries", "apodictic-plugin", "server", "payload-manifest.json"]) {
     fs.rmSync(path.join(VENDOR, p), { recursive: true, force: true });
   }
   let payloadAsset, manifest;
@@ -348,6 +359,7 @@ async function doSync() {
     tree_hash_schema: "apodictic-tree-sha256-v2",
     dist_sha256: computed.dist_sha256,
     plugin_sha256: computed.plugin_sha256,
+    server_sha256: computed.server_sha256,
     sidecars: computed.sidecars,
     status: "pinned",
     source: `https://github.com/${REPO}/releases/tag/${rel.tag_name}`,

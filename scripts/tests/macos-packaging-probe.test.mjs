@@ -110,6 +110,7 @@ function macBundleFixture(t) {
   const staged = path.join(repoRoot, "vendor", "gemini-web");
   fs.cpSync(path.join(staged, "dist"), path.join(resources, "dist"), { recursive: true, errorOnExist: true });
   fs.cpSync(path.join(staged, "apodictic-plugin"), path.join(resources, "apodictic-plugin"), { recursive: true, errorOnExist: true });
+  fs.cpSync(path.join(staged, "server"), path.join(resources, "server"), { recursive: true, errorOnExist: true });
   const stagedSidecar = path.join(staged, "binaries", `app-sidecar-${host.targetTriple}`);
   for (const name of ["apodictic-tauri", "app-sidecar"]) { const target = path.join(macos, name); fs.copyFileSync(stagedSidecar, target); fs.chmodSync(target, 0o755); }
   const version = JSON.parse(fs.readFileSync(path.join(repoRoot, "src-tauri", "tauri.conf.json"), "utf8")).version;
@@ -126,6 +127,7 @@ test("copied staged bundle satisfies the real macOS verifier", { skip: macOnly }
 
 for (const [name, mutate, expected] of [
   ["changed dist byte", (fixture) => fs.writeFileSync(path.join(fixture.app, "Contents", "Resources", "dist", "tamper.txt"), "tamper"), /dist hash/],
+  ["changed server byte", (fixture) => { const script = path.join(fixture.app, "Contents", "Resources", "server", "index.cjs"); const bytes = fs.readFileSync(script); bytes[0] ^= 1; fs.writeFileSync(script, bytes); }, /server hash/],
   ["wrong minimum OS", (fixture) => { const plist = path.join(fixture.app, "Contents", "Info.plist"); fs.writeFileSync(plist, fs.readFileSync(plist, "utf8").replace("14.0", "13.0")); }, /minimum system version/],
   ["missing sidecar", (fixture) => fs.rmSync(path.join(fixture.app, "Contents", "MacOS", "app-sidecar")), /sidecar is missing/],
 ]) test(`copied bundle refuses ${name} without a receipt`, { skip: macOnly }, (t) => {
