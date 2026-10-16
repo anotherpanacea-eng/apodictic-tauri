@@ -142,6 +142,7 @@ name = "apodictic-tauri"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "dunce",
  "keyring",
  "log",
  "rand 0.8.8",

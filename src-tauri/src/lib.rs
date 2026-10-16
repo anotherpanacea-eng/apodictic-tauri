@@ -85,10 +85,20 @@ fn start_sidecar(app: &AppHandle) -> Result<(), String> {
     let dek = get_or_create_keychain_secret(APP_ID, "credential_encryption_key", 32)
         .map_err(|e| format!("Failed to get or create DEK from keychain: {}", e))?;
 
+    // app-sidecar is the official Node binary; it runs the bundled server script. A missing
+    // script fails at the health gate below. On Windows resource_dir is canonicalized to a
+    // `\\?\C:\...` path, which Node cannot load as its main script; dunce drops that prefix.
+    let server_script = dunce::simplified(&pub_resources_dir)
+        .join("server")
+        .join("index.cjs");
+
     let sidecar_command = app
         .shell()
         .sidecar("app-sidecar")
         .map_err(|e| format!("Failed to create sidecar command: {}", e))?
+        .args([&server_script])
+        // Keep a user's shell NODE_OPTIONS from changing the sidecar's Node flags.
+        .env("NODE_OPTIONS", "")
         .env("APP_DATA_PATH", app_data_dir.to_string_lossy().to_string())
         .env(
             "PUBLIC_RESOURCES_PATH",

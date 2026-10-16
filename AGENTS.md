@@ -14,7 +14,8 @@ private · TS web app), `apodictic-tauri` (consumer · private · Rust + TS — 
 
 **This repo's dependency contract:**
 - **Consumes** `APODICTIC-Gemini`'s versioned **desktop payload** (built `dist/` + per-target
-  `app-sidecar` binaries + the apodictic-plugin), published as a release asset. Pinned in
+  `app-sidecar` binaries, which are the official Node runtime + the `server/` bundle they run +
+  the apodictic-plugin), published as a release asset. Pinned in
   `gemini-web.lock`, drift-gated offline by `scripts/sync-gemini-web.mjs --check`. The weekly
   `.github/workflows/sync-gemini-web.yml` auto-PRs the version bump. **Don't hand-edit the lock
   or the vendored payload under `vendor/gemini-web/` — run `scripts/sync-gemini-web.mjs`.**
@@ -124,7 +125,7 @@ normal merge policy.
   git tarball — the payload is uncommitted build artifacts), verifies every hash against the
   producer's `payload-manifest.json`, writes `vendor/gemini-web/`, and records `gemini-web.lock`.
 - `scripts/sync-gemini-web.mjs --check` is the **drift gate**. It always re-computes the vendored
-  `dist/` + `apodictic-plugin/` tree hashes and each sidecar hash and fails if they ≠ the lock
+  `dist/` + `apodictic-plugin/` + `server/` tree hashes and each sidecar hash and fails if they ≠ the lock
   (offline byte-integrity). **Only when a token is present** (not PR-time CI) does it also check the
   lock is behind the latest release — comparing the resolved **commit SHA**, not just the tag, to
   catch a re-pointed tag. "Behind latest" freshness is otherwise the weekly sync workflow's job (it
