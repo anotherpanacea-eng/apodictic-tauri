@@ -86,8 +86,11 @@ fn start_sidecar(app: &AppHandle) -> Result<(), String> {
         .map_err(|e| format!("Failed to get or create DEK from keychain: {}", e))?;
 
     // app-sidecar is the official Node binary; it runs the bundled server script. A missing
-    // script fails at the health gate below.
-    let server_script = pub_resources_dir.join("server").join("index.cjs");
+    // script fails at the health gate below. On Windows resource_dir is canonicalized to a
+    // `\\?\C:\...` path, which Node cannot load as its main script; dunce drops that prefix.
+    let server_script = dunce::simplified(&pub_resources_dir)
+        .join("server")
+        .join("index.cjs");
 
     let sidecar_command = app
         .shell()
