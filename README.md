@@ -23,9 +23,9 @@ The test: *could a second desktop shell be swapped in without touching the engin
 ## Vendor relationship (consumer)
 
 This repo is a **consumer** of `APODICTIC-Gemini`. Gemini publishes a versioned **desktop
-payload** (built `dist/` + per-target `app-sidecar` binaries + the apodictic-plugin) as a
-release asset; this repo vendors it behind a lock + drift gate, mirroring the fleet's
-`APODICTIC-Gemini → apodictic` pull/lock/drift-gate pattern.
+payload** (built `dist/` + per-target `app-sidecar` Node binaries + the `server/` bundle +
+the apodictic-plugin) as a release asset; this repo vendors it behind a lock + drift gate,
+mirroring the fleet's `APODICTIC-Gemini → apodictic` pull/lock/drift-gate pattern.
 
 - `gemini-web.lock` — committed; pins the consumed Gemini release + per-target payload hashes.
 - `scripts/sync-gemini-web.mjs [--check]` — pulls the payload into `vendor/gemini-web/` and

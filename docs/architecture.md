@@ -135,15 +135,16 @@ GitHub _release assets_** (`/releases/.../assets`), not a tarball. Do **not** li
 
 - **Producer (`APODICTIC-Gemini`):** a tagged release builds and uploads a **desktop-payload archive** as a
   release asset (e.g. `desktop-payload-<version>.tar.zst`) containing: `dist/` (built frontend) +
-  per-target `app-sidecar` binaries + `apodictic-plugin/`, plus `payload-manifest.json`
+  per-target `app-sidecar` binaries (the unmodified official Node runtime) + `server/` (the
+  `index.cjs` bundle they run, plus notices) + `apodictic-plugin/`, plus `payload-manifest.json`
   (`{ web_version, plugin_version, tree_hash_schema, per-target sidecar entries with sha256,
-  dist_sha256, plugin_sha256 }`).
+  dist_sha256, plugin_sha256, server_sha256 }`). See `docs/sidecar-node-runtime-spec.md`.
   The producer pipeline has shipped; current consumers are pinned to its release assets.
 - **Consumer (`apodictic-tauri`):**
   - `gemini-web.lock` — `{ repo, tag, commit, web_version, plugin_version, payload_asset,
-    tree_hash_schema, dist_sha256, plugin_sha256, sidecars: [{ target, sha256 }], status, source }`. **Per-component
+    tree_hash_schema, dist_sha256, plugin_sha256, server_sha256, sidecars: [{ target, sha256 }], status, source }`. **Per-component
     hashes, no separate archive `payload_sha256`** (reconciled w/ the implementation, S4):
-    `dist_sha256`/`plugin_sha256` are **canonical v2 tree hashes** — a domain tag and entry count,
+    `dist_sha256`/`plugin_sha256`/`server_sha256` are **canonical v2 tree hashes** — a domain tag and entry count,
     followed by sorted byte-length-prefixed UTF-8 paths and byte-length-prefixed contents. The
     producer's `payload-manifest.json` MUST declare `apodictic-tree-sha256-v2` and match. The sole
     compatibility exception is the schema-less, already-published Gemini `v0.2.1` payload at commit
@@ -168,7 +169,8 @@ GitHub _release assets_** (`/releases/.../assets`), not a tarball. Do **not** li
     `sync-apodictic-plugin.yml` (which reads the *public* apodictic repo).
   - `tauri.conf.json` re-points: `frontendDist → vendor/gemini-web/dist`,
     `externalBin → vendor/gemini-web/binaries/app-sidecar`,
-    `resources → { vendor/gemini-web/apodictic-plugin, vendor/gemini-web/dist }`. **Drop
+    `resources → { vendor/gemini-web/apodictic-plugin, vendor/gemini-web/dist, vendor/gemini-web/server }`;
+    the shell spawns `app-sidecar <resource_dir>/server/index.cjs` with `NODE_OPTIONS` cleared. **Drop
     `beforeBuildCommand`** (no Gemini source to build); `frontendDist` resolving to the vendored `dist/` is
     **mandatory** for `tauri build` — there is no fallback build path. **Dev-mode (`beforeDevCommand`/`devUrl`)
     is resolved in §9-C below, promoted to decided design.**

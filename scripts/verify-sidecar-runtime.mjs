@@ -9,6 +9,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+// app-sidecar is the official Node binary; it runs the vendored server bundle.
+const serverScript = path.join(repoRoot, "vendor", "gemini-web", "server", "index.cjs");
 
 function targetTriple() {
   if (process.platform === "darwin" && process.arch === "arm64") return "aarch64-apple-darwin";
@@ -136,7 +138,7 @@ try {
     PORT: String(port),
   });
 
-  child = spawn(binary, [], { env, stdio: ["ignore", "pipe", "pipe"] });
+  child = spawn(binary, [serverScript], { env, stdio: ["ignore", "pipe", "pipe"] });
   child.on("error", (error) => {
     diagnostics += `spawn error: ${error.message}\n`;
   });
@@ -153,7 +155,7 @@ try {
   child = undefined;
 
   diagnostics = "";
-  child = spawn(binary, [], {
+  child = spawn(binary, [serverScript], {
     env: { ...env, APODICTIC_RUNTIME_MODE: " local" },
     stdio: ["ignore", "pipe", "pipe"],
   });

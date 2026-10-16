@@ -90,13 +90,13 @@ export function expectedHostTarget(platform = process.platform, architecture = p
 
 function validateLock(lock, targetTriple) {
   const hashPattern = /^[0-9a-f]{64}$/;
-  for (const field of ["tag", "commit", "dist_sha256", "plugin_sha256"]) {
+  for (const field of ["tag", "commit", "dist_sha256", "plugin_sha256", "server_sha256"]) {
     if (typeof lock[field] !== "string" || !lock[field]) fail(`gemini-web.lock has invalid ${field}`);
   }
   if (lock.tree_hash_schema !== "apodictic-tree-sha256-v2") fail("gemini-web.lock lacks the collision-unambiguous tree hash schema");
   if (lock.status !== "pinned") fail("gemini-web.lock is not pinned");
   if (!/^[0-9a-f]{40}$/.test(lock.commit)) fail("gemini-web.lock contains a malformed commit");
-  if (!hashPattern.test(lock.dist_sha256) || !hashPattern.test(lock.plugin_sha256)) {
+  if (![lock.dist_sha256, lock.plugin_sha256, lock.server_sha256].every((hash) => hashPattern.test(hash))) {
     fail("gemini-web.lock contains a malformed tree hash");
   }
   if (!Array.isArray(lock.sidecars) || lock.sidecars.length === 0) {
@@ -165,11 +165,13 @@ export function verifyBundleAndConstructReceipt(appArgument, targetTriple, sourc
   const sidecarBinary = path.join(appPath, "Contents", "MacOS", "app-sidecar");
   const distDirectory = path.join(appPath, "Contents", "Resources", "dist");
   const pluginDirectory = path.join(appPath, "Contents", "Resources", "apodictic-plugin");
+  const serverDirectory = path.join(appPath, "Contents", "Resources", "server");
   requireRegularFile(infoPlist, "bundle Info.plist");
   requireRegularFile(appBinary, "bundle app executable");
   requireRegularFile(sidecarBinary, "bundle sidecar");
   requireDirectory(distDirectory, "bundle dist resource");
   requireDirectory(pluginDirectory, "bundle plugin resource");
+  requireDirectory(serverDirectory, "bundle server resource");
 
   const baseConfig = readJsonObject(baseConfigPath, "base Tauri config");
   if (typeof baseConfig.version !== "string" || !baseConfig.version) fail("base Tauri config has no version");
@@ -189,6 +191,7 @@ export function verifyBundleAndConstructReceipt(appArgument, targetTriple, sourc
   if (sha256File(sidecarBinary) !== lockedSidecar.sha256) fail("bundled sidecar hash does not match gemini-web.lock");
   if (hashTree(distDirectory) !== lock.dist_sha256) fail("bundled dist hash does not match gemini-web.lock");
   if (hashTree(pluginDirectory) !== lock.plugin_sha256) fail("bundled plugin hash does not match gemini-web.lock");
+  if (hashTree(serverDirectory) !== lock.server_sha256) fail("bundled server hash does not match gemini-web.lock");
   verifyUnsignedOrAdHoc(appPath, environment);
 
   return {
