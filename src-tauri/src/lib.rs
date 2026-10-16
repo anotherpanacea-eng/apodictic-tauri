@@ -93,7 +93,7 @@ fn start_sidecar(app: &AppHandle) -> Result<(), String> {
         .shell()
         .sidecar("app-sidecar")
         .map_err(|e| format!("Failed to create sidecar command: {}", e))?
-        .args([server_script.to_string_lossy().to_string()])
+        .args([&server_script])
         // Keep a user's shell NODE_OPTIONS from changing the sidecar's Node flags.
         .env("NODE_OPTIONS", "")
         .env("APP_DATA_PATH", app_data_dir.to_string_lossy().to_string())
