@@ -87,7 +87,7 @@ notices, local-authority, CSP, or hosted-surface gate. See
 
 ## Fleet
 
-`apodictic-tauri` is fleet member #5 — **consumer · private · Rust + TS**. The fleet workflow
+`apodictic-tauri` is fleet member #5 — **consumer · public · Rust + TS**. The fleet workflow
 standard (spec → review → write → review → fix → merge; merge commits, never squash; Codex 5.5
 is the PR review step) lives in [`AGENTS.md`](AGENTS.md). Full architecture + migration plan:
 [`docs/architecture.md`](docs/architecture.md).

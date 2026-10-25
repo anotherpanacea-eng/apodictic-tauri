@@ -43,10 +43,6 @@ jobs:
             }
             fs.appendFileSync(process.env.GITHUB_OUTPUT, `tag=${lock.tag}\nweb=${lock.web_version}\n`);
           '
-      - name: Ensure sync PR is draft and unarmed before update
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node scripts/ensure-sync-pr-draft.mjs --repository "$GITHUB_REPOSITORY"
       - name: Open or update draft bump PR
         uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
         with:
@@ -62,7 +58,3 @@ jobs:
           delete-branch: true
           draft: always-true
           add-paths: gemini-web.lock
-      - name: Ensure sync PR is draft and unarmed after update
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node scripts/ensure-sync-pr-draft.mjs --repository "$GITHUB_REPOSITORY"

@@ -5,7 +5,7 @@
 **Spec review:** independent subagent, 2026-06-19 — initial verdict NEEDS-REVISION (3 blocking: B1 release-asset
 vs tarball transport, B2 Gemini has no release pipeline + Windows-sidecar gap, B3 dev-mode contradiction);
 all folded into §3/§5/§9 as decided design. Re-derived verdict: **CLEAR-TO-BUILD** for Increment 1.
-**Repo:** [`anotherpanacea-eng/apodictic-tauri`](https://github.com/anotherpanacea-eng/apodictic-tauri) (private).
+**Repo:** [`anotherpanacea-eng/apodictic-tauri`](https://github.com/anotherpanacea-eng/apodictic-tauri) (public).
 **Authoritative copy:** this in-repo file (`docs/architecture.md`) is authoritative; the fleet hub
 (`Cowork/repo-fleet/specs/apodictic-tauri-architecture.md`) carries a pointer (per the fleet "authoritative
 spec in-repo, pointer in hub" pattern).
