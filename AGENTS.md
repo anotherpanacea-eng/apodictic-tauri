@@ -9,7 +9,7 @@ follow. It governs the maintainer's own agent sessions.
 This repo is one of **six** maintained together (all `github.com/anotherpanacea-eng`):
 `setec-voiceprint` (producer · public · Python), `apodictic` (consumer + producer · public ·
 Python), `setec-voicewright` (consumer · private · Python), `APODICTIC-Gemini` (consumer ·
-private · TS web app), `apodictic-tauri` (consumer · private · Rust + TS — **this repo**), and
+private · TS web app), `apodictic-tauri` (consumer · public · Rust + TS — **this repo**), and
 `wandering-inn-reader` (independent reader application).
 
 **This repo's dependency contract:**
@@ -33,8 +33,8 @@ layer — keep the shell replaceable.
 **Shared workflow:** spec→review→write→review→fix→periodic integration train; landing preserves
 merge structure and adds no bytes. Codex is a standing review lane; do not merge out from under it.
 
-**Protect-public-only:** this is a **private** repo, so no branch protection is configured (the
-fleet only protects the public repos). The Codex review gate is still observed by convention.
+**Visibility:** this is a **public** repo, so Actions minutes are free. The Codex review gate is
+observed by convention.
 
 **Cloud-reachable coordination hub** (added 2026-07-19):
 [`anotherpanacea-eng/fleet-coordination`](https://github.com/anotherpanacea-eng/fleet-coordination)
@@ -136,20 +136,12 @@ normal merge policy.
 
 ## PRs and integration trains
 
-- Ordinary and automated work opens as an unarmed draft. Do not add `ci-ready` during normal cadence.
-- Periodically freeze exact reviewed heads into a fresh same-repository `train/<bounded-name>` branch
-  based on exact `origin/main`. Merge constituents with `--no-ff` and keep an external closed inventory.
-- Version/changelog work, when needed, is an explicitly inventoried and reviewed train-only commit
-  made before freeze. The landing adds no bytes.
-- Promote the frozen train exactly once. It spends one full CI job per train; constituent drafts and
-  label noise consume no runner. `ci-ready` is reserved for a deliberate same-repository standalone
-  exception; forks never authorize hosted CI.
-- Land only a live green receipt bound to exact base, head, singleton job, run attempt, and GitHub
-  synthetic merge. Push `main` with an exact expected-head lease, prove containment/closure, and delete
-  only unchanged same-repository branches under their own leases.
-- GitHub Pro rulesets, branch protection, Merge Queue, squash, and ad-hoc direct pushes are not part of
-  this private-repository protocol. Safety comes from exact receipts, independent reviews, and CAS.
-- The exact-head generic, fleet-posture, and CI review lanes must all approve before promotion/landing.
+- Keep reviewed changes in draft. Drafts start no CI job.
+- Build a fresh `train/<date>[-<slug>]` branch from `origin/main` with `--no-ff` merges of reviewed
+  heads, and run `git diff --check origin/main...HEAD` for stray conflict markers.
+- Run the local checks for what you touched, mark the train ready, and merge it with a merge commit
+  once CI is green. Close the constituents it carried and delete merged branches.
+- Don't rerun a red train unchanged; fix it locally first.
 
 ### Branch naming
 
@@ -160,11 +152,10 @@ normal merge policy.
 ## CI
 
 `.github/workflows/ci.yml` is pull-request-only and has one bounded `macos-latest` validation job.
-It preserves payload sync/drift, packaging-policy, Rust test/clippy/build, and sidecar gates. Only a
-promoted same-repository train or explicit same-repository non-sync `ci-ready` standalone can run it;
-fork events remain zero-step, and there is no
-duplicate push-to-main run. `.github/workflows/sync-gemini-web.yml` opens or updates the weekly payload
-bump PR as a draft and independently proves it remains draft and unarmed.
+It preserves payload sync/drift, packaging-policy, Rust test/clippy/build, and sidecar gates. Any
+non-draft PR runs it (public repository, so Actions minutes are free); there is no duplicate
+push-to-main run. `.github/workflows/sync-gemini-web.yml` opens or updates the weekly payload bump
+PR as a draft.
 There is no `@claude` comment workflow here; it was removed on 2026-10-04 after a month with no
 real invocations. Ask for Claude review from a Claude Code session instead.
 

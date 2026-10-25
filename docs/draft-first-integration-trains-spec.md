@@ -2,6 +2,13 @@
 
 **Status:** Built
 
+> **Amended 2026-10-25 (fleet-coordination#1099).** The merge-binding step,
+> train inventory checker, CI receipts, sync-PR draft enforcer, CAS landing
+> script and their policy tests were removed, as in setec-voiceprint and
+> setec-voicewright on 2026-10-16, and CI now runs on any non-draft PR. Trains
+> stay; AGENTS.md § PRs and integration trains is the current procedure.
+> Sections below that describe the removed tools are historical.
+
 **Tracking:** [Issue #10](https://github.com/anotherpanacea-eng/apodictic-tauri/issues/10)
 
 ## Goal

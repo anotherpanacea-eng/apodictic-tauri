@@ -1,38 +1,22 @@
 name: ci
 
-# Ordinary work remains draft and unarmed. Only a same-repository disposable
-# train, or an explicitly authorized same-repository standalone exception, spends this job.
-run-name: >-
-  apodictic-tauri-ci pr=${{ github.event.pull_request.number }}
-  action=${{ github.event.action }}
-  train=${{ github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'train/') }}
-  ci-ready-event=${{ github.event.label.name == 'ci-ready' }}
+# Public repository, so Actions minutes are free. Drafts start nothing; a
+# non-draft PR (usually a train/ branch) runs the job.
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, labeled, unlabeled, closed]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
 
 concurrency:
-  group: >-
-    apodictic-tauri-ci-${{ github.event.pull_request.number }}-${{ (contains(fromJSON('["opened","synchronize","reopened","ready_for_review","converted_to_draft","closed"]'), github.event.action) || (github.event.pull_request.head.repo.full_name == github.repository && !startsWith(github.event.pull_request.head.ref, 'train/') && contains(fromJSON('["labeled","unlabeled"]'), github.event.action) && github.event.label.name == 'ci-ready')) && 'clearance' || github.run_id }}
+  group: apodictic-tauri-ci-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   validate:
-    if: >-
-      ${{ github.event.pull_request.draft == false &&
-          ((github.event.pull_request.head.repo.full_name == github.repository &&
-            startsWith(github.event.pull_request.head.ref, 'train/') &&
-            contains(fromJSON('["opened","synchronize","reopened","ready_for_review"]'), github.event.action)) ||
-           (github.event.pull_request.head.repo.full_name == github.repository &&
-            !startsWith(github.event.pull_request.head.ref, 'train/') &&
-            github.event.pull_request.head.ref != 'chore/sync-gemini-web' &&
-            contains(github.event.pull_request.labels.*.name, 'ci-ready') &&
-            (contains(fromJSON('["opened","synchronize","reopened","ready_for_review"]'), github.event.action) ||
-             (github.event.action == 'labeled' && github.event.label.name == 'ci-ready')))) }}
+    if: github.event.pull_request.draft == false
     runs-on: macos-latest
     timeout-minutes: 15
     steps:
@@ -41,32 +25,10 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-      - name: Bind billed job to the exact pull-request merge
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          MERGE_SHA: ${{ github.sha }}
-          JOB_NAME: ${{ github.job }}
-          REPOSITORY: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
-        run: >-
-          node scripts/check-pr-merge-binding.mjs
-          --repository "$REPOSITORY"
-          --base "$BASE_SHA" --head "$HEAD_SHA" --github-sha "$MERGE_SHA"
-          --job "$JOB_NAME" --run-id "$RUN_ID" --run-attempt "$RUN_ATTEMPT"
       - name: Install Node dependencies
         run: npm ci
-      - name: Draft-first train policy tests
-        run: >-
-          node --test
-          tests/policy/ci-policy.test.mjs
-          tests/policy/merge-train.test.mjs
-          tests/policy/pr-merge-binding.test.mjs
-          tests/policy/sync-pr-draft.test.mjs
-          tests/policy/train-ci-receipts.test.mjs
-          tests/policy/landing.test.mjs
-          tests/policy/capabilities.test.mjs
+      - name: Vault capability test
+        run: node --test tests/policy/capabilities.test.mjs
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
