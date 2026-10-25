@@ -30,6 +30,19 @@ fn is_expected_local_health(health: &SidecarHealth) -> bool {
         && health.bind_scope.as_deref() == Some("loopback")
 }
 
+/// The probe is plain HTTP, but reqwest 0.13 shares the updater's `rustls-no-provider` build,
+/// whose client builder panics until a process-wide crypto provider exists. The updater installs
+/// `ring` only when it checks, which runs after this probe, so install the same provider here.
+/// The updater's `system-proxy` feature also applies here, so keep the loopback probe direct.
+fn health_probe_client() -> Client {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    Client::builder()
+        .timeout(Duration::from_secs(1))
+        .no_proxy()
+        .build()
+        .unwrap()
+}
+
 /// Securely get an existing 32-byte B64 string from OS Keychain, or generate a high-entropy one.
 fn get_or_create_keychain_secret(
     service: &str,
@@ -123,10 +136,7 @@ fn start_sidecar(app: &AppHandle) -> Result<(), String> {
 
     // Block logic until sidecar provides 200 OK
     println!("[Main] Waiting for sidecar to become healthy...");
-    let client = Client::builder()
-        .timeout(Duration::from_secs(1))
-        .build()
-        .unwrap();
+    let client = health_probe_client();
 
     let mut attempts = 0;
     loop {
@@ -274,7 +284,12 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_expected_local_health, SidecarHealth};
+    use super::{health_probe_client, is_expected_local_health, SidecarHealth};
+
+    #[test]
+    fn health_probe_client_builds_before_updater_runs() {
+        health_probe_client();
+    }
 
     #[test]
     fn accepts_only_exact_local_loopback_health() {
