@@ -9,7 +9,7 @@ follow. It governs the maintainer's own agent sessions.
 This repo is one of **six** maintained together (all `github.com/anotherpanacea-eng`):
 `setec-voiceprint` (producer · public · Python), `apodictic` (consumer + producer · public ·
 Python), `setec-voicewright` (consumer · private · Python), `APODICTIC-Gemini` (consumer ·
-private · TS web app), `apodictic-tauri` (consumer · private · Rust + TS — **this repo**), and
+private · TS web app), `apodictic-tauri` (consumer · public · Rust + TS — **this repo**), and
 `wandering-inn-reader` (independent reader application).
 
 **This repo's dependency contract:**
@@ -33,8 +33,8 @@ layer — keep the shell replaceable.
 **Shared workflow:** spec→review→write→review→fix→periodic integration train; landing preserves
 merge structure and adds no bytes. Codex is a standing review lane; do not merge out from under it.
 
-**Protect-public-only:** this is a **private** repo, so no branch protection is configured (the
-fleet only protects the public repos). The Codex review gate is still observed by convention.
+**Visibility:** this is a **public** repo, so Actions minutes are free. The Codex review gate is
+observed by convention.
 
 **Cloud-reachable coordination hub** (added 2026-07-19):
 [`anotherpanacea-eng/fleet-coordination`](https://github.com/anotherpanacea-eng/fleet-coordination)
