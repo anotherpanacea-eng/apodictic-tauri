@@ -72,7 +72,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 | License | Crate uses |
 | --- | --- |
-| MIT License (MIT) | 372 |
+| MIT License (MIT) | 378 |
 | Unicode License v3 (Unicode-3.0) | 19 |
 | ISC License (ISC) | 18 |
 | Apache License 2.0 (Apache-2.0) | 12 |
@@ -6870,10 +6870,14 @@ Used by:
 - windows-result 0.4.1 (https://github.com/microsoft/windows-rs)
 - windows-strings 0.4.2 (https://github.com/microsoft/windows-rs)
 - windows-strings 0.5.1 (https://github.com/microsoft/windows-rs)
+- windows-sys 0.45.0 (https://github.com/microsoft/windows-rs)
+- windows-sys 0.48.0 (https://github.com/microsoft/windows-rs)
 - windows-sys 0.52.0 (https://github.com/microsoft/windows-rs)
 - windows-sys 0.59.0 (https://github.com/microsoft/windows-rs)
 - windows-sys 0.60.2 (https://github.com/microsoft/windows-rs)
 - windows-sys 0.61.2 (https://github.com/microsoft/windows-rs)
+- windows-targets 0.42.2 (https://github.com/microsoft/windows-rs)
+- windows-targets 0.48.5 (https://github.com/microsoft/windows-rs)
 - windows-targets 0.52.6 (https://github.com/microsoft/windows-rs)
 - windows-targets 0.53.5 (https://github.com/microsoft/windows-rs)
 - windows-threading 0.1.0 (https://github.com/microsoft/windows-rs)
@@ -6881,6 +6885,8 @@ Used by:
 - windows 0.36.1 (https://github.com/microsoft/windows-rs)
 - windows 0.61.3 (https://github.com/microsoft/windows-rs)
 - windows_x86_64_msvc 0.36.1 (https://github.com/microsoft/windows-rs)
+- windows_x86_64_msvc 0.42.2 (https://github.com/microsoft/windows-rs)
+- windows_x86_64_msvc 0.48.5 (https://github.com/microsoft/windows-rs)
 - windows_x86_64_msvc 0.52.6 (https://github.com/microsoft/windows-rs)
 - windows_x86_64_msvc 0.53.1 (https://github.com/microsoft/windows-rs)
 
