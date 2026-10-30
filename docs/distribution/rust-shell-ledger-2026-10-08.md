@@ -193,3 +193,37 @@ compile-time-only fxhash, paste and core2. The trial was not built or tested.
 
 With these rulings and the license branch applied, `cargo deny check licenses` passes.
 
+
+## Refresh, 2026-10-29
+
+- Repo head: `866c141` (origin/main). Same tools and commands as above, with RustSec advisory-db at
+  `ee1a49a2769a24a596afc1c20cb33748d2769586` (2026-10-29).
+- **Rulings 1 to 3 have landed.** The LICENSE file is in place, with `license-file` and
+  `publish = false` in `Cargo.toml`. The lockfile refresh landed as #32, and the reqwest 0.13 upgrade
+  as #38. h2 0.3.27, rustls-pemfile and the five unic-\* crates are gone from every target.
+- **The notices and SBOMs had been stale since 10-11.** They predated #32 and #38, and they are
+  regenerated here. SBOM component totals fall from 427 to 415 (aarch64-apple-darwin), from 428 to
+  416 (x86_64-apple-darwin) and from 421 to 414 (x86_64-pc-windows-msvc).
+- `cargo deny check`: licenses ok, bans ok, sources ok, advisories failed (17 diagnostics before this
+  change's lockfile update, 12 after, each count including the core2 yank warning).
+
+### Cleared here (lockfile only)
+
+rustls goes from 0.23.45 to 0.23.46 and rustls-webpki from 0.103.15 to 0.103.16. Only those two
+entries' version and checksum lines change; every other dependency edge is kept as on main.
+`cargo update -p` would also have repointed several crates' windows-sys and getrandom
+selections. That clears RUSTSEC-2026-0346, -0347, -0348 and -0349 (rustls) and
+RUSTSEC-2026-0382 (webpki), all in the shipped TLS stack on all three targets. `cargo test`,
+`cargo clippy --all-targets -- -D warnings` and `cargo build`, all with `--locked`, pass on
+aarch64-apple-darwin. Windows was not built locally.
+
+### Still open (new since 10-08, for the owner)
+
+| Crate | Version | Reach | Advisory | Fix path | Proposed verdict |
+| --- | --- | --- | --- | --- | --- |
+| zip | 4.6.1 | shipped, x86_64-pc-windows-msvc only (tauri-plugin-updater 2.12.0) | RUSTSEC-2026-0367, -0368, -0369 (extraction: SUID bits, symlink targets, permissions through symlinks) | tauri-plugin-updater 2.14.1 uses zip ^9 but needs tauri ^2.12. A lockfile dry run pulls a large tauri, wry, webview2 and windows-crate upgrade, so it is its own item, with a Windows build | waiver candidate until that upgrade. In updater 2.12.0, `download()` checks the minisign signature against the pinned public key before `install`, and zip is only compiled into, and only unpacks on, Windows (`extract_zip`). A hostile archive therefore needs the signing key, and the SUID and symlink issues are mostly Unix ones. |
+| crypto-bigint | 0.5.5 | shipped, all 3 (k256 ← iota-crypto ← iota_stronghold 2.1.0) | RUSTSEC-2026-0387 (timing variability in operations meant to be constant-time) | needs >= 0.7.6. There is no path inside Stronghold, the same dormant upstream as bincode. | waiver candidate under ruling 5 (Stronghold waived for the alpha). It needs a local timing attacker. |
+| zip | 7.2.0 | compile-time only (libsodium-sys-stable build script) | RUSTSEC-2026-0367, -0368, -0369 | none needed for shipping | ok, not distributed. Its build script unpacks a prebuilt MSVC libsodium zip on Windows builds, after checking that zip's minisign signature (`retrieve_and_verify_archive`). It runs at build time only, like core2. |
+
+The unmaintained items are unchanged from 10-08: bincode is waived under ruling 5, and core2, fxhash
+and paste are compile-time only.
