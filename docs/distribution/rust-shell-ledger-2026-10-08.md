@@ -239,7 +239,7 @@ Two more advisories reach the shipped graph. cargo-deny's default reporting omit
 
 | Crate | Version | Advisory | Reach | Patched |
 | --- | --- | --- | --- | --- |
-| tokio | 1.51.0 | RUSTSEC-2026-0386 (informational, unsound: `AsyncFd::new` I/O safety) | shipped, through tauri and reqwest | >= 1.51.6 |
+| tokio | 1.51.0 | RUSTSEC-2026-0386 (informational, unsound: `AsyncFd::new` I/O safety) | shipped, through tauri and reqwest | >= 1.51.6, < 1.52.0, or >= 1.53.3 (1.52.x and 1.53.0 to 1.53.2 stay affected) |
 | anyhow | 1.0.102 | RUSTSEC-2026-0190 (informational, unsound: `Error::downcast_mut`) | shipped, through tauri and Stronghold | >= 1.0.103 |
 
 So not every open advisory is waived or compile-time only yet. Licenses, bans and sources pass.
