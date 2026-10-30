@@ -235,4 +235,11 @@ and paste are compile-time only.
 | 9 | zip 4.6.1 (RUSTSEC-2026-0367, -0368, -0369; Windows updater) | Waived for the alpha (owner, 2026-10-29 8:34 PM ET) | Waived. The updater verifies the update's minisign signature before it unzips, and only on Windows. The tauri 2.12 and updater 2.14.1 upgrade that would remove it stays an idea card (AP-2). Its Mac trial was clean; Windows is untested. |
 | 10 | crypto-bigint 0.5.5 (RUSTSEC-2026-0387; via iota_stronghold) | Waived for the alpha (owner, 2026-10-29 8:34 PM ET), alongside ruling 5 | Waived. There is no upgrade path inside Stronghold. |
 
-With rulings 9 and 10, every open advisory on the shipped Rust graph is waived for the alpha or compile-time only. Licenses, bans and sources pass.
+Two more advisories reach the shipped graph. cargo-deny's default reporting omits informational "unsound" notices, so `cargo deny check` did not surface them; Codex review of this PR found them. Both are fixed upstream, so a lockfile bump is pending for each, not a waiver:
+
+| Crate | Version | Advisory | Reach | Patched |
+| --- | --- | --- | --- | --- |
+| tokio | 1.51.0 | RUSTSEC-2026-0386 (informational, unsound: `AsyncFd::new` I/O safety) | shipped, through tauri and reqwest | >= 1.51.6 |
+| anyhow | 1.0.102 | RUSTSEC-2026-0190 (informational, unsound: `Error::downcast_mut`) | shipped, through tauri and Stronghold | >= 1.0.103 |
+
+So not every open advisory is waived or compile-time only yet. Licenses, bans and sources pass.
