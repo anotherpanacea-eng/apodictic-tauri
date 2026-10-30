@@ -235,11 +235,13 @@ and paste are compile-time only.
 | 9 | zip 4.6.1 (RUSTSEC-2026-0367, -0368, -0369; Windows updater) | Waived for the alpha (owner, 2026-10-29 8:34 PM ET) | Waived. The updater verifies the update's minisign signature before it unzips, and only on Windows. The tauri 2.12 and updater 2.14.1 upgrade that would remove it stays an idea card (AP-2). Its Mac trial was clean; Windows is untested. |
 | 10 | crypto-bigint 0.5.5 (RUSTSEC-2026-0387; via iota_stronghold) | Waived for the alpha (owner, 2026-10-29 8:34 PM ET), alongside ruling 5 | Waived. There is no upgrade path inside Stronghold. |
 
-Two more advisories reach the shipped graph. cargo-deny's default reporting omits informational "unsound" notices, so `cargo deny check` did not surface them; Codex review of this PR found them. Both are fixed upstream, so a lockfile bump is pending for each, not a waiver:
+Two more advisories reach the shipped graph. cargo-deny's default reporting omits informational "unsound" notices, so `cargo deny check` did not surface them; Codex review of this PR found them. Both are fixed upstream, and this PR clears both with a lockfile bump, not a waiver:
 
-| Crate | Version | Advisory | Reach | Patched |
-| --- | --- | --- | --- | --- |
-| tokio | 1.51.0 | RUSTSEC-2026-0386 (informational, unsound: `AsyncFd::new` I/O safety) | shipped, through tauri and reqwest | >= 1.51.6, < 1.52.0, or >= 1.53.3 (1.52.x and 1.53.0 to 1.53.2 stay affected) |
-| anyhow | 1.0.102 | RUSTSEC-2026-0190 (informational, unsound: `Error::downcast_mut`) | shipped, through tauri and Stronghold | >= 1.0.103 |
+| Crate | Was | Now | Advisory | Reach | Patched |
+| --- | --- | --- | --- | --- | --- |
+| tokio | 1.51.0 | 1.51.6 | RUSTSEC-2026-0386 (informational, unsound: `AsyncFd::new` I/O safety) | shipped, through tauri and reqwest | >= 1.51.6, < 1.52.0, or >= 1.53.3 (1.52.x and 1.53.0 to 1.53.2 stay affected) |
+| anyhow | 1.0.102 | 1.0.103 | RUSTSEC-2026-0190 (informational, unsound: `Error::downcast_mut`) | shipped, through tauri and Stronghold | >= 1.0.103 |
 
-So not every open advisory is waived or compile-time only yet. Licenses, bans and sources pass.
+As with rustls above, only those two entries' version and checksum lines change. `cargo update -p` would also have repointed the socket2 and uds_windows windows-sys edges from 0.60.2 to 0.61.2. The notices and the three SBOMs are regenerated; they change only for these two crates and the SBOM timestamp. `cargo test`, `cargo clippy --all-targets -- -D warnings` and `cargo build`, all with `--locked`, pass on aarch64-apple-darwin, with the v0.4.2 payload synced. Windows was not built locally. The `cargo deny check advisories` findings are the same before and after the bump.
+
+Every open shipped advisory is now waived or cleared. The remaining unmaintained items are compile-time only or waived under ruling 5. Licenses, bans and sources pass.
