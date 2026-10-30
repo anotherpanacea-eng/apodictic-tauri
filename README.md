@@ -49,8 +49,8 @@ npm run desktop:dev
 npm run desktop:build
 ```
 
-The committed payload lock pins Gemini **v0.3.4** with Apple Silicon Mac, Intel Mac,
-and Windows x86_64 sidecar inputs. Gemini's producer workflow builds the Windows
+The committed payload lock pins one Gemini release (its `tag` field) with Apple Silicon Mac,
+Intel Mac and Windows x86_64 sidecar inputs. Gemini's producer workflow builds the Windows
 sidecar on Windows; `.github/workflows/release-alpha.yml` contains native Windows
 NSIS and macOS alpha build paths. These are source/configuration facts, not a new
 successful-build or distribution qualification. See [current migration status](docs/architecture.md#5-migration-status-reconciled-2026-10-04).
