@@ -227,3 +227,12 @@ aarch64-apple-darwin. Windows was not built locally.
 
 The unmaintained items are unchanged from 10-08: bincode is waived under ruling 5, and core2, fxhash
 and paste are compile-time only.
+
+### Owner rulings (2026-10-29)
+
+| # | Item | Ruling | Status |
+| --- | --- | --- | --- |
+| 9 | zip 4.6.1 (RUSTSEC-2026-0367, -0368, -0369; Windows updater) | Waived for the alpha (owner, 2026-10-29 8:34 PM ET) | Waived. The updater verifies the update's minisign signature before it unzips, and only on Windows. The tauri 2.12 and updater 2.14.1 upgrade that would remove it stays an idea card (AP-2). Its Mac trial was clean; Windows is untested. |
+| 10 | crypto-bigint 0.5.5 (RUSTSEC-2026-0387; via iota_stronghold) | Waived for the alpha (owner, 2026-10-29 8:34 PM ET), alongside ruling 5 | Waived. There is no upgrade path inside Stronghold. |
+
+With rulings 9 and 10, every open advisory on the shipped Rust graph is waived for the alpha or compile-time only. Licenses, bans and sources pass.
