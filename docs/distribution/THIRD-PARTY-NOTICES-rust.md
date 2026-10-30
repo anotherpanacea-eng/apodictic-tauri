@@ -6917,7 +6917,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 Used by:
 
 - tokio-util 0.7.18 (https://github.com/tokio-rs/tokio)
-- tokio 1.51.0 (https://github.com/tokio-rs/tokio)
+- tokio 1.51.6 (https://github.com/tokio-rs/tokio)
 
 ```text
 MIT License
@@ -7113,7 +7113,7 @@ SOFTWARE.
 Used by:
 
 - adler2 2.0.1 (https://github.com/oyvindln/adler2)
-- anyhow 1.0.102 (https://github.com/dtolnay/anyhow)
+- anyhow 1.0.103 (https://github.com/dtolnay/anyhow)
 - atomic-waker 1.1.2 (https://github.com/smol-rs/atomic-waker)
 - camino 1.2.2 (https://github.com/camino-rs/camino)
 - cargo-platform 0.1.9 (https://github.com/rust-lang/cargo)

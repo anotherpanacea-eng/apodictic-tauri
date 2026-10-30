@@ -43,7 +43,8 @@
     ],
     "createUpdaterArtifacts": true,
     "macOS": {
-      "hardenedRuntime": false
+      "hardenedRuntime": false,
+      "minimumSystemVersion": "13.5"
     }
   },
   "plugins": {

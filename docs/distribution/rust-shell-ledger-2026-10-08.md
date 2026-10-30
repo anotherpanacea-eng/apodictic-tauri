@@ -227,3 +227,23 @@ aarch64-apple-darwin. Windows was not built locally.
 
 The unmaintained items are unchanged from 10-08: bincode is waived under ruling 5, and core2, fxhash
 and paste are compile-time only.
+
+### Owner rulings (2026-10-29)
+
+| # | Item | Ruling | Status |
+| --- | --- | --- | --- |
+| 9 | zip 4.6.1 (RUSTSEC-2026-0367, -0368, -0369; Windows updater) | Waived for the alpha (owner, 2026-10-29 8:34 PM ET) | Waived. The updater verifies the update's minisign signature before it unzips, and only on Windows. The tauri 2.12 and updater 2.14.1 upgrade that would remove it stays an idea card (AP-2). Its Mac trial was clean; Windows is untested. |
+| 10 | crypto-bigint 0.5.5 (RUSTSEC-2026-0387; via iota_stronghold) | Waived for the alpha (owner, 2026-10-29 8:34 PM ET), alongside ruling 5 | Waived. There is no upgrade path inside Stronghold. |
+
+Two more advisories reach the shipped graph. cargo-deny's default reporting omits informational "unsound" notices, so `cargo deny check` did not surface them; Codex review of this PR found them. Both are fixed upstream, and this PR clears both with a lockfile bump, not a waiver:
+
+| Crate | Was | Now | Advisory | Reach | Patched |
+| --- | --- | --- | --- | --- | --- |
+| tokio | 1.51.0 | 1.51.6 | RUSTSEC-2026-0386 (informational, unsound: `AsyncFd::new` I/O safety) | shipped, through tauri and reqwest | >= 1.51.6, < 1.52.0, or >= 1.53.3 (1.52.x and 1.53.0 to 1.53.2 stay affected) |
+| anyhow | 1.0.102 | 1.0.103 | RUSTSEC-2026-0190 (informational, unsound: `Error::downcast_mut`) | shipped, through tauri and Stronghold | >= 1.0.103 |
+
+As with rustls above, only those two entries' version and checksum lines change. `cargo update -p` would also have repointed the socket2 and uds_windows windows-sys edges from 0.60.2 to 0.61.2. The notices and the three SBOMs are regenerated; they change only for these two crates and the SBOM timestamp. `cargo test`, `cargo clippy --all-targets -- -D warnings` and `cargo build`, all with `--locked`, pass on aarch64-apple-darwin, with the v0.4.2 payload synced. Windows was not built locally. `cargo check --locked --target x86_64-pc-windows-msvc -p tokio -p anyhow -p socket2@0.6.3` passes on the Mac, so the bumped crates and the kept windows-sys edges type-check for Windows; a whole-app Windows check stops at ring's C build, which needs the MSVC toolchain. The `cargo deny check advisories` findings are the same before and after the bump.
+
+Rerunning `cargo deny check advisories` with `unsound = "all"` in a scratch copy of `deny.toml` turns up one more advisory and nothing else new: RUSTSEC-2026-0097 (informational, unsound: `rand` `ThreadRng` reseeding from inside a custom logger). It hits rand 0.7.3, which arrives only through phf_codegen, a build dependency of selectors (under tauri-utils/kuchikiki), so it runs at build time, like fxhash. The shipped graph on all three targets uses rand 0.8.8, which is inside the patched range (>= 0.8.6, < 0.9.0). The checked-in `deny.toml` is unchanged.
+
+Every open shipped advisory is now waived or cleared. The remaining unmaintained and unsound items are compile-time only (core2, fxhash, paste, rand 0.7.3) or waived under ruling 5. Licenses, bans and sources pass.
