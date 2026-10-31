@@ -1,6 +1,6 @@
 // Rebuilds src-tauri/icons and the favicon set from the hand-pixeled grids
 // (sprites.json, used at 16/32/48 px) and the vector master (mark.svg, used
-// at 64 px and above). Run: node docs/icons/build.mjs  (needs Playwright).
+// at 64 px and above). Run: node docs/icons/build.mjs  (see README.md for the Playwright setup).
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 import { createRequire } from 'node:module';
