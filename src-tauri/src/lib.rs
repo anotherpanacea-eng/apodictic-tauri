@@ -169,7 +169,7 @@ fn start_sidecar(app: &AppHandle) -> Result<(), String> {
                 CommandEvent::Terminated(payload) => {
                     // The stored child is the healthy, running sidecar. If it is gone, the
                     // sidecar was stopped on purpose (update) or never became healthy (startup
-                    // already reported that), so only an unexpected exit reaches the page.
+                    // already reported that), so only an unexpected exit reaches the user.
                     let was_running = events_app
                         .state::<Sidecar>()
                         .0
@@ -179,10 +179,16 @@ fn start_sidecar(app: &AppHandle) -> Result<(), String> {
                         .is_some();
                     if was_running {
                         eprintln!("[Main] Sidecar exited unexpectedly: {:?}", payload.code);
-                        show_startup_error(
-                            &events_app,
-                            "APODICTIC's background service stopped unexpectedly. Restart APODICTIC to continue. Unsaved results from this session may be lost.",
-                        );
+                        // A dialog, not the startup error page: the loaded app keeps its
+                        // results on screen and its export controls still work offline.
+                        events_app
+                            .dialog()
+                            .message(
+                                "APODICTIC's background service stopped, so new analyses won't run.\n\nYour results are still on screen. Export anything you want to keep, then restart APODICTIC.",
+                            )
+                            .title("APODICTIC stopped working")
+                            .kind(MessageDialogKind::Error)
+                            .show(|_| {});
                     }
                 }
                 _ => {}
