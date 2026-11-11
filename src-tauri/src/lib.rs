@@ -17,7 +17,16 @@ const APP_ID: &str = "com.anotherpanacea.apodictic";
 
 /// The running sidecar, kept so an update can stop it before the installer replaces its binary
 /// (Windows will not overwrite a running executable).
-struct Sidecar(Mutex<Option<CommandChild>>);
+struct Sidecar(Mutex<SidecarSlot>);
+
+#[derive(Default)]
+struct SidecarSlot {
+    /// Set once startup has seen it healthy; taken by the updater before it stops the sidecar.
+    child: Option<CommandChild>,
+    /// Set when the process ends. Startup checks it under the same lock before storing the
+    /// child, so an exit that lands between the health probe and the store is not missed.
+    exited: bool,
+}
 
 #[derive(Debug, Deserialize)]
 struct SidecarHealth {
@@ -170,13 +179,12 @@ fn start_sidecar(app: &AppHandle) -> Result<(), String> {
                     // The stored child is the healthy, running sidecar. If it is gone, the
                     // sidecar was stopped on purpose (update) or never became healthy (startup
                     // already reported that), so only an unexpected exit reaches the user.
-                    let was_running = events_app
-                        .state::<Sidecar>()
-                        .0
-                        .lock()
-                        .unwrap()
-                        .take()
-                        .is_some();
+                    let was_running = {
+                        let sidecar = events_app.state::<Sidecar>();
+                        let mut slot = sidecar.0.lock().unwrap();
+                        slot.exited = true;
+                        slot.child.take().is_some()
+                    };
                     if was_running {
                         eprintln!("[Main] Sidecar exited unexpectedly: {:?}", payload.code);
                         // A dialog, not the startup error page: the loaded app keeps its
@@ -222,6 +230,9 @@ fn start_sidecar(app: &AppHandle) -> Result<(), String> {
                 }
             }
         }
+        if app.state::<Sidecar>().0.lock().unwrap().exited {
+            return Err("Sidecar exited during startup.".to_string());
+        }
         if attempts > 60 {
             // Give up after 30 seconds
             eprintln!("[Main] Sidecar failed to report healthy within 30 seconds");
@@ -234,7 +245,12 @@ fn start_sidecar(app: &AppHandle) -> Result<(), String> {
         std::thread::sleep(Duration::from_millis(500));
     }
 
-    *app.state::<Sidecar>().0.lock().unwrap() = Some(child);
+    let sidecar = app.state::<Sidecar>();
+    let mut slot = sidecar.0.lock().unwrap();
+    if slot.exited {
+        return Err("Sidecar exited during startup.".to_string());
+    }
+    slot.child = Some(child);
     Ok(())
 }
 
@@ -273,7 +289,7 @@ fn check_for_update(app: AppHandle) {
                     return;
                 }
                 tauri::async_runtime::spawn(async move {
-                    if let Some(child) = handle.state::<Sidecar>().0.lock().unwrap().take() {
+                    if let Some(child) = handle.state::<Sidecar>().0.lock().unwrap().child.take() {
                         let _ = child.kill();
                     }
                     match update.download_and_install(|_, _| {}, || {}).await {
@@ -297,7 +313,7 @@ fn check_for_update(app: AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .manage(Sidecar(Mutex::new(None)))
+        .manage(Sidecar(Mutex::new(SidecarSlot::default())))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
