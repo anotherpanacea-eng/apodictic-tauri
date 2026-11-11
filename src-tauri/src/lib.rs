@@ -17,12 +17,36 @@ const APP_ID: &str = "com.anotherpanacea.apodictic";
 
 /// The running sidecar, kept so an update can stop it before the installer replaces its binary
 /// (Windows will not overwrite a running executable).
-struct Sidecar(Mutex<Option<CommandChild>>);
+struct Sidecar(Mutex<SidecarSlot>);
+
+#[derive(Default)]
+struct SidecarSlot {
+    /// Set once startup has seen it healthy; taken by the updater before it stops the sidecar.
+    child: Option<CommandChild>,
+    /// Set when the process ends. Startup checks it under the same lock before storing the
+    /// child, so an exit that lands between the health probe and the store is not missed.
+    exited: bool,
+}
 
 #[derive(Debug, Deserialize)]
 struct SidecarHealth {
     runtime_mode: Option<String>,
     bind_scope: Option<String>,
+}
+
+/// Script that replaces the page with the startup error. The message is JSON-encoded and set as
+/// text, so quotes or markup in an OS error can neither break the script nor inject HTML.
+fn startup_error_script(message: &str) -> String {
+    let message = serde_json::to_string(message).unwrap_or_else(|_| "\"\"".to_string());
+    format!(
+        "document.body.innerHTML = '<div style=\"padding:40px;font-family:sans-serif;color:white;background:#b91c1c;min-height:100vh;\"><h2>Startup Error</h2><p></p></div>'; document.querySelector('p').textContent = {message};"
+    )
+}
+
+fn show_startup_error(app: &AppHandle, message: &str) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.eval(startup_error_script(message));
+    }
 }
 
 fn is_expected_local_health(health: &SidecarHealth) -> bool {
@@ -141,12 +165,41 @@ fn start_sidecar(app: &AppHandle) -> Result<(), String> {
         .spawn()
         .map_err(|e| format!("Failed to spawn sidecar: {}", e))?;
 
+    let events_app = app.clone();
     tauri::async_runtime::spawn(async move {
         while let Some(event) = rx.recv().await {
-            if let CommandEvent::Stdout(line) = event {
-                println!("[Sidecar] {}", String::from_utf8_lossy(&line));
-            } else if let CommandEvent::Stderr(line) = event {
-                eprintln!("[Sidecar Error] {}", String::from_utf8_lossy(&line));
+            match event {
+                CommandEvent::Stdout(line) => {
+                    println!("[Sidecar] {}", String::from_utf8_lossy(&line));
+                }
+                CommandEvent::Stderr(line) => {
+                    eprintln!("[Sidecar Error] {}", String::from_utf8_lossy(&line));
+                }
+                CommandEvent::Terminated(payload) => {
+                    // The stored child is the healthy, running sidecar. If it is gone, the
+                    // sidecar was stopped on purpose (update) or never became healthy (startup
+                    // already reported that), so only an unexpected exit reaches the user.
+                    let was_running = {
+                        let sidecar = events_app.state::<Sidecar>();
+                        let mut slot = sidecar.0.lock().unwrap();
+                        slot.exited = true;
+                        slot.child.take().is_some()
+                    };
+                    if was_running {
+                        eprintln!("[Main] Sidecar exited unexpectedly: {:?}", payload.code);
+                        // A dialog, not the startup error page: the loaded app keeps its
+                        // results on screen and its export controls still work offline.
+                        events_app
+                            .dialog()
+                            .message(
+                                "APODICTIC's background service stopped, so new analyses won't run.\n\nYour results are still on screen. Export anything you want to keep, then restart APODICTIC.",
+                            )
+                            .title("APODICTIC stopped working")
+                            .kind(MessageDialogKind::Error)
+                            .show(|_| {});
+                    }
+                }
+                _ => {}
             }
         }
     });
@@ -177,6 +230,9 @@ fn start_sidecar(app: &AppHandle) -> Result<(), String> {
                 }
             }
         }
+        if app.state::<Sidecar>().0.lock().unwrap().exited {
+            return Err("Sidecar exited during startup.".to_string());
+        }
         if attempts > 60 {
             // Give up after 30 seconds
             eprintln!("[Main] Sidecar failed to report healthy within 30 seconds");
@@ -189,7 +245,12 @@ fn start_sidecar(app: &AppHandle) -> Result<(), String> {
         std::thread::sleep(Duration::from_millis(500));
     }
 
-    *app.state::<Sidecar>().0.lock().unwrap() = Some(child);
+    let sidecar = app.state::<Sidecar>();
+    let mut slot = sidecar.0.lock().unwrap();
+    if slot.exited {
+        return Err("Sidecar exited during startup.".to_string());
+    }
+    slot.child = Some(child);
     Ok(())
 }
 
@@ -228,7 +289,7 @@ fn check_for_update(app: AppHandle) {
                     return;
                 }
                 tauri::async_runtime::spawn(async move {
-                    if let Some(child) = handle.state::<Sidecar>().0.lock().unwrap().take() {
+                    if let Some(child) = handle.state::<Sidecar>().0.lock().unwrap().child.take() {
                         let _ = child.kill();
                     }
                     match update.download_and_install(|_, _| {}, || {}).await {
@@ -252,7 +313,7 @@ fn check_for_update(app: AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .manage(Sidecar(Mutex::new(None)))
+        .manage(Sidecar(Mutex::new(SidecarSlot::default())))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -278,19 +339,17 @@ pub fn run() {
             // Note: Since Tauri limits window navigation dynamically, we might need 
             // to simply set a redirect script on the default html loaded, or eval:
             if !cfg!(debug_assertions) {
-                if let Some(window) = app.get_webview_window("main") {
-                    match result {
-                        Ok(_) => {
+                match result {
+                    Ok(_) => {
+                        if let Some(window) = app.get_webview_window("main") {
                             println!("[Main] Redirecting window to local sidecar UI");
                             let _ = window.eval("window.location.replace('http://127.0.0.1:3001')");
-                            check_for_update(app.handle().clone());
-                        }
-                        Err(e) => {
-                            let error_html = format!("document.body.innerHTML = '<div style=\"padding:40px;font-family:sans-serif;color:white;background:#b91c1c;min-height:100vh;\"><h2>Startup Error</h2><p>{}</p></div>';", e);
-                            let _ = window.eval(&error_html);
                         }
                     }
+                    Err(e) => show_startup_error(app.handle(), &e),
                 }
+                // Check even after a failed start: an update is how a broken release gets fixed.
+                check_for_update(app.handle().clone());
             }
 
             Ok(())
@@ -302,8 +361,8 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        health_probe_client, is_expected_local_health, resolve_keychain_secret, SidecarHealth,
-        BASE64,
+        health_probe_client, is_expected_local_health, resolve_keychain_secret,
+        startup_error_script, SidecarHealth, BASE64,
     };
     use base64::Engine as _;
     use keyring::{credential::CredentialApi, mock::MockCredential, Entry, Error};
@@ -439,6 +498,16 @@ mod tests {
         assert_eq!(entry.get_password().unwrap(), "existing-secret-marker");
         assert_eq!((entropy_calls.get(), store_calls.get()), (0, 0));
         assert_eq!(result.unwrap_err(), "Failed to read keychain secret.");
+    }
+
+    #[test]
+    fn startup_error_script_keeps_message_as_text() {
+        let message = "Can't start: </p><script>x()</script> \\ \"quoted\"\nnext";
+        let script = startup_error_script(message);
+        let encoded = serde_json::to_string(message).unwrap();
+        let (markup, text) = script.split_once("textContent = ").unwrap();
+        assert_eq!(text, format!("{encoded};"));
+        assert!(!markup.contains("x()"));
     }
 
     #[test]
