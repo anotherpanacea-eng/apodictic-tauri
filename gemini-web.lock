@@ -1,14 +1,14 @@
 {
   "repo": "anotherpanacea-eng/APODICTIC-Gemini",
-  "tag": "v0.4.2",
-  "commit": "958712ae2efb691e5df1f399b08a9b4e97468c13",
-  "web_version": "0.4.2",
+  "tag": "v0.4.3",
+  "commit": "8bd9e3b5b22147629c51a166b422cdbd59260699",
+  "web_version": "0.4.3",
   "plugin_version": "2.16.0",
-  "payload_asset": "desktop-payload-0.4.2.tar.gz",
+  "payload_asset": "desktop-payload-0.4.3.tar.gz",
   "tree_hash_schema": "apodictic-tree-sha256-v2",
-  "dist_sha256": "6eb602b368aa2668cfa91fc77ad7e117105571c37fd818fe2ed4259699f90124",
+  "dist_sha256": "fc838a2bf55af073078ae23e0c9a696e4b9660a2904ef1ad89caed1d737a1377",
   "plugin_sha256": "723e0853348eaa118df3a3695770e05cd6e004edbe807483b9dd00ec4438bfcd",
-  "server_sha256": "80f42296bcf37630807e569ba972722fbd339ca3140e323ea7b5d609fd181f17",
+  "server_sha256": "a1926f6cce409d61ef2188d7aaa702c330bbf1c2d4ed34603000300e99b7d731",
   "sidecars": [
     {
       "target": "aarch64-apple-darwin",
@@ -24,5 +24,5 @@
     }
   ],
   "status": "pinned",
-  "source": "https://github.com/anotherpanacea-eng/APODICTIC-Gemini/releases/tag/v0.4.2"
+  "source": "https://github.com/anotherpanacea-eng/APODICTIC-Gemini/releases/tag/v0.4.3"
 }
