@@ -35,8 +35,9 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ### Microsoft WebView2 loader (Windows only)
 
-`WebView2LoaderStatic.lib` from the Microsoft.Web.WebView2 SDK 1.0.3650.58,
-vendored and linked by webview2-com-sys. Text from the SDK's NuGet license.
+`WebView2LoaderStatic.lib` from the Microsoft.Web.WebView2 SDK 1.0.3800.47,
+vendored and linked by webview2-com-sys. Text from the SDK's NuGet license
+(taken from the 1.0.3650.58 package).
 
 ```text
 Copyright (C) Microsoft Corporation. All rights reserved.
