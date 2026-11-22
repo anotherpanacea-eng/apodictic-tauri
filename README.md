@@ -12,7 +12,7 @@ this shell, in `apodictic` (the framework) and `APODICTIC-Gemini` (the web/API c
 sidecar). This repo owns only:
 
 - the Tauri **Rust shell** (`src-tauri/`) and webview,
-- OS-keychain-backed secret storage (Stronghold vault + credential-encryption DEK),
+- OS-keychain-backed secret storage (the credential-encryption DEK),
 - the **sidecar lifecycle** (spawn the bundled Node server, health-gate, redirect the webview),
 - local file / project access and the **privacy / per-send consent** surface,
 - the **signed updater** and desktop packaging/signing.

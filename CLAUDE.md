@@ -14,7 +14,7 @@ Read `AGENTS.md` first. In particular:
 - **`AGENTS.md` § Vendor / consumer machinery** — `gemini-web.lock` + `scripts/sync-gemini-web.mjs
   --check` is the drift gate; **don't hand-edit the lock or the vendored payload — run the sync
   script.**
-- **`AGENTS.md` § Security** — the keychain → Stronghold → DEK chain must not regress.
+- **`AGENTS.md` § Security** — the keychain → DEK chain must not regress.
 - Architecture + migration plan: **[`docs/architecture.md`](docs/architecture.md)**.
 
 Update `AGENTS.md`, not this file, when the workflow changes.

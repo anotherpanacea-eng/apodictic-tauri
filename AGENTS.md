@@ -93,8 +93,8 @@ spec  →  review  →  write  →  review  →  fix  →  merge
 
 The spec/code reviews earn their keep when the reviewer does more than read for plausibility —
 run the real gate, distrust count-shaped or "it builds" claims, and check the seams the change
-actually touches (here: the vendor boundary, the sidecar lifecycle, the keychain/Stronghold
-chain, and the Tauri capability allowlist). The spec-review gate for this repo's own founding
+actually touches (here: the vendor boundary, the sidecar lifecycle, the keychain DEK chain, and
+the Tauri capability allowlist). The spec-review gate for this repo's own founding
 caught three blocking transport/sequencing issues before any code was written — keep that bar.
 
 ## Test value convention
@@ -178,8 +178,11 @@ real invocations. Ask for Claude review from a Claude Code session instead.
 
 ## Security (do not regress)
 
-The OS-keychain → Stronghold vault-key + `CREDENTIAL_ENCRYPTION_KEY` DEK chain (`src-tauri/src/
-lib.rs`) is the local-credential guarantee — re-verify it survives any change. Keep
+The OS-keychain → `CREDENTIAL_ENCRYPTION_KEY` DEK chain (`src-tauri/src/lib.rs`) is the
+local-credential guarantee: the DEK is created once in the OS keychain and handed to the sidecar,
+which encrypts stored API keys with it. Re-verify it survives any change. (The Stronghold vault and
+its `get_vault_password` / `open_browser` bridge were retired on 2026-11-22; nothing called them
+after hosted login was removed.) Keep
 `src-tauri/capabilities/default.json` (the permission boundary) minimal and in step with the
 shell's actual shell/keychain usage.
 

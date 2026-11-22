@@ -45,7 +45,7 @@ client on top of a shared engine**, not the product. `APODICTIC-Gemini` stays th
 the **producer** of a versioned *desktop payload* (built frontend + Node sidecar binaries + the
 apodictic-plugin); `apodictic-tauri` is a **consumer** that vendors that payload behind a lock + drift gate
 — the same pull/lock/drift-gate pattern as `APODICTIC-Gemini → apodictic` and `SETEC → consumers`. The
-Tauri repo owns only the Rust shell, OS-keychain/Stronghold security, sidecar lifecycle, local-file/privacy
+Tauri repo owns only the Rust shell, OS-keychain security, sidecar lifecycle, local-file/privacy
 surface, and the signed updater. The provider abstraction (incl. local-LLM backends) lives in the **shared
 engine (the sidecar/server)**, never in the Tauri command layer.
 
@@ -61,6 +61,7 @@ not a greenfield scaffold.
   - OS-Keychain-backed secrets (`keyring` crate): a 32-byte Stronghold vault key + a
     `CREDENTIAL_ENCRYPTION_KEY` DEK, generated on first run and stored in the OS keychain.
   - `tauri-plugin-stronghold` for encrypted secret storage, password bridged from the keychain.
+    (Retired 2026-11-22 with the vault key and the two bridge commands below; only the DEK remains.)
   - **Spawns a Node sidecar** (`app-sidecar`, an `externalBin`) with env `APP_DATA_PATH`,
     `PUBLIC_RESOURCES_PATH`, `CREDENTIAL_ENCRYPTION_KEY`; **health-gates** on `http://127.0.0.1:3001/api/health`
     (≤30s) then **redirects the webview** to `http://127.0.0.1:3001`. Dev mode relies on the Vite server at :3000.
@@ -96,7 +97,7 @@ desktop payload published by Gemini and vendored by the Tauri repo.**
         │                                     │
    apodictic-web                        apodictic-tauri          ← THIS repo (desktop shell only)
    (browser UI, in Gemini)              • Rust shell + webview
-                                        • OS keychain / Stronghold
+                                        • OS keychain (credential DEK)
                                         • sidecar lifecycle + health gate
                                         • local file / project access
                                         • privacy / per-send consent gate
@@ -118,7 +119,7 @@ touching the engine?" Must remain *yes*.
 | Server / sidecar source (`server/`) | `APODICTIC-Gemini` | this is the shared runner/API; **stays** |
 | Model-provider interface + local-LLM adapters | `APODICTIC-Gemini` (`server/`) | **NOT** the Tauri shell |
 | **Desktop-payload publish** (dist + sidecar bins + plugin) | `APODICTIC-Gemini` | **new producer step** |
-| Rust shell, keychain/Stronghold, sidecar lifecycle, updater, local-file/consent | `apodictic-tauri` | extracted from Gemini |
+| Rust shell, keychain DEK, sidecar lifecycle, updater, local-file/consent | `apodictic-tauri` | extracted from Gemini |
 | Vendoring + lock + drift gate of the payload | `apodictic-tauri` | mirrors Gemini→apodictic |
 
 ---
@@ -241,7 +242,7 @@ Gemini removal. Current source has advanced through those code changes:
 | 0 — Spec/review | Historical reviewed extraction design retained here. | This reconciliation has independent scope and build review; it grants no release operation. |
 | 1 — Skeleton/consumer | Landed shell, vendor synchronizer, lock and drift checks; the lock is pinned, not bootstrap. | A lock records input identities, not proof that a local machine has staged or run them. |
 | 2 — Gemini producer | `release-desktop-payload.yml` builds frontend and native Windows/macOS sidecars, verifies runtime contracts and assembles release assets. | A successful exact-run receipt is separate from configured workflow steps. |
-| 3 — Shell extraction | Tauri owns `src-tauri/`; its config uses vendored frontend/sidecar/resources and separate Gemini dev server. | Local macOS build proof, keychain/Stronghold/DEK and capability requalification are not established by this documentation. |
+| 3 — Shell extraction | Tauri owns `src-tauri/`; its config uses vendored frontend/sidecar/resources and separate Gemini dev server. | Local macOS build proof, keychain/DEK and capability requalification are not established by this documentation. |
 | 4 — Gemini removal | Already landed in Gemini `d0b4abd67dc1d094c42b083d8f2032e7f6cdcd1d`; current Gemini has no `src-tauri/`. | Retained sidecar build scripts and frontend Tauri adapters are deliberate shared-engine/producer support. No further removal is authorized. |
 
 The Windows runner gap from the historical plan is closed in source: the producer
@@ -299,7 +300,7 @@ snapshot establishes no new distribution or installation pass.
 
 ## 8. Security & privacy notes (carry forward, don't regress in extraction)
 
-- The keychain → Stronghold DEK chain and the sidecar `CREDENTIAL_ENCRYPTION_KEY` flow must survive the
+- The keychain DEK chain and the sidecar `CREDENTIAL_ENCRYPTION_KEY` flow must survive the
   extraction byte-for-byte (these are the local-credential security guarantees). Re-verify on first build.
 - The Tauri capability allowlist (`src-tauri/capabilities/default.json`) is the permission boundary — review
   it on extraction; keep it minimal.
