@@ -5,8 +5,8 @@
 # file. It is not a compliance decision: deny.toml is the license check, and
 # MPL-2.0 is accepted here only so the option-ext notice can be rendered (the
 # owner accepted option-ext on 2026-10-08). Bundled native code whose license
-# text is not in its crate (libsodium, the WebView2 loader) is carried verbatim
-# in about.hbs, because cargo-about only reads files from the crate itself.
+# text is not in its crate (the WebView2 loader) is carried verbatim in
+# about.hbs, because cargo-about only reads files from the crate itself.
 
 # Release targets built by .github/workflows/release-alpha.yml.
 targets = [

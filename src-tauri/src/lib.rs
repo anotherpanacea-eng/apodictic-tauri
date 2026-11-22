@@ -3,7 +3,6 @@ use keyring::Entry;
 use rand::RngCore;
 use reqwest::blocking::Client;
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -79,7 +78,7 @@ fn get_or_create_keychain_secret(
         entry.get_password(),
         length,
         |bytes| {
-            // These bytes back the Stronghold vault key and credential-encryption DEK.
+            // These bytes back the credential-encryption DEK.
             rand::rngs::OsRng.fill_bytes(bytes);
         },
         |secret| entry.set_password(secret),
@@ -104,21 +103,6 @@ fn resolve_keychain_secret(
         // Keyring errors can include credential data; never expose their payloads.
         Err(_) => Err("Failed to read keychain secret.".to_string()),
     }
-}
-
-/// Bridge command so the JS frontend can bootstrap Stronghold using an OS-keychain backed password.
-#[tauri::command]
-fn get_vault_password() -> Result<String, String> {
-    get_or_create_keychain_secret(APP_ID, "stronghold_vault_key", 32)
-}
-
-#[tauri::command]
-fn open_browser(url: String, app: AppHandle) -> Result<(), String> {
-    // TODO(apodictic-tauri#follow-up): migrate to tauri-plugin-opener; `Shell::open` is deprecated
-    // in tauri-plugin-shell 2.x. Suppressed (not migrated) here to keep this extraction
-    // behavior-identical to APODICTIC-Gemini's working shell; migration is a separate change.
-    #[allow(deprecated)]
-    app.shell().open(&url, None).map_err(|e| e.to_string())
 }
 
 fn start_sidecar(app: &AppHandle) -> Result<(), String> {
@@ -317,20 +301,6 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(
-            tauri_plugin_stronghold::Builder::new(|password| {
-                // We use SHA-256 here since `password` is already a 44-character B64 high entropy string
-                // directly pulled from the OS Keychain.
-                let mut hasher = Sha256::new();
-                hasher.update(password.as_bytes());
-                let result = hasher.finalize();
-                let mut key = [0u8; 32];
-                key.copy_from_slice(&result);
-                key.to_vec()
-            })
-            .build(),
-        )
-        .invoke_handler(tauri::generate_handler![get_vault_password, open_browser])
         .setup(|app| {
             let result = start_sidecar(app.handle());
 

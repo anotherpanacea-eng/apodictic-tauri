@@ -27,7 +27,7 @@ jobs:
           cache: npm
       - name: Install Node dependencies
         run: npm ci
-      - name: Vault capability test
+      - name: Capability test
         run: node --test tests/policy/capabilities.test.mjs
       - uses: dtolnay/rust-toolchain@stable
         with:

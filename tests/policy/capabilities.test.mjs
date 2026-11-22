@@ -8,16 +8,16 @@ const capability = JSON.parse(fs.readFileSync(path.join(root, "src-tauri", "capa
 const shell = fs.readFileSync(path.join(root, "src-tauri", "src", "lib.rs"), "utf8");
 
 // In a release build the shell redirects the window to the sidecar's page. Tauri treats that page
-// as a remote origin, so the vault only works if the capability names exactly that origin
-// (reproduced: "Command plugin:stronghold|initialize not allowed by ACL" on desktop 0.1.0-alpha.2).
-test("the vault capability covers the page the shell loads, and nothing wider", () => {
+// as a remote origin, so the capability must name exactly that origin and grant it nothing beyond
+// core:default.
+test("the capability covers the page the shell loads, and nothing wider", () => {
   const redirect = shell.match(/window\.location\.replace\('([^']+)'\)/);
   assert.ok(redirect, "shell redirect to the sidecar page not found");
   const origin = new URL(redirect[1]).origin;
   assert.equal(origin, "http://127.0.0.1:3001");
   assert.deepEqual(capability.windows, ["main"]);
   assert.deepEqual(capability.remote, { urls: [`${origin}/*`] });
-  assert.deepEqual(capability.permissions, ["core:default", "stronghold:default", "stronghold:allow-remove-store-record"]);
+  assert.deepEqual(capability.permissions, ["core:default"]);
 });
 
 // Installed apps verify every update against this key; a placeholder would make every update fail.
